@@ -19,6 +19,7 @@ from ezyrb import ReducedOrderModel as ROM
 import pickle
 import copy
 import os
+from time import time
 
 
 
@@ -149,20 +150,34 @@ class convAE(Reduction, ANN):
         #tmp = self._list_to_sequential(layers_encoder,
                                                 #self.function_encoder)
         self.encoder_cnn = nn.Sequential(
-            nn.Conv2d(1, 1, 5, stride=2, padding=1),
-            nn.ReLU(True),
-            nn.Conv2d(1, 1, 5, stride=2, padding=1),
-            nn.BatchNorm2d(1),
-            nn.ReLU(True),
-            nn.Conv2d(1, 1, 2, stride=2, padding=1),
-            nn.ReLU(True))
+            nn.Conv2d(1, 24, 2, stride=2, padding=0),
+            nn.BatchNorm2d(24),
+            nn.ELU(True),
+            nn.Conv2d(24, 48, 2, stride=2, padding=0),
+            nn.BatchNorm2d(48),
+            nn.ELU(True),
+            nn.Conv2d(48, 96, 2, stride=2, padding=0),
+            nn.BatchNorm2d(96),
+            nn.ELU(True),
+            nn.Conv2d(96, 192, 2, stride=2, padding=0),
+            nn.BatchNorm2d(192),
+            nn.ELU(True),
+            nn.Conv2d(192, 378, 2, stride=2, padding=0),
+            nn.BatchNorm2d(378),
+            nn.ELU(True),
+            nn.Conv2d(378, 378, 2, stride=2, padding=0),
+            nn.BatchNorm2d(378),
+            nn.Conv2d(378, 378, 2, stride=2, padding=0),
+            #nn.Conv2d(378, 378, 2, stride=2, padding=0)
+            # nn.Conv2d(378, 378, 2, stride=2, padding=0)
+            )
         
 
             ### Flatten layer
         self.flatten = nn.Flatten(start_dim=1)
         ### Linear section
         self.encoder_lin = nn.Sequential(
-            nn.Linear(1024, 14),
+            nn.Linear(1512, 14),
             #nn.ReLU(True),
             #nn.Linear(128, 4)
         )  #QUI CI METTIAMO list_to_sequential di ann
@@ -174,24 +189,33 @@ class convAE(Reduction, ANN):
         # layers_decoder = self.layers_decoder.copy()
         # layers_decoder.append(values.shape[1])
         self.decoder_lin = nn.Sequential(
-            nn.Linear(14, 1024))
+            nn.Linear(14, 1512))
             # nn.ReLU(True),
             # nn.Linear(128, 3 * 3 * 32),
             # nn.ReLU(True))
         
-        self.unflatten = nn.Unflatten(dim=1, unflattened_size=(1, 32, 32)),
+        self.unflatten = nn.Unflatten(dim=1, unflattened_size=(378, 2, 2)),
             
         self.decoder_cnn = nn.Sequential(
-            nn.ConvTranspose2d(1, 1, 2, 
-            stride=2, padding=1, output_padding=1),
-            nn.BatchNorm2d(1),
-            nn.ReLU(True),
-            nn.ConvTranspose2d(1, 1, 5, stride=2, 
-            padding=1, output_padding=0),
-            nn.BatchNorm2d(1),
-            nn.ReLU(True),
-            nn.ConvTranspose2d(1, 1, 5, stride=2, 
-            padding=1, output_padding=1)
+            nn.ConvTranspose2d(378, 378, 2, stride=2, padding=0, output_padding=0),
+            nn.BatchNorm2d(378),
+            nn.ELU(True),
+            nn.ConvTranspose2d(378, 378, 2, stride=2, padding=0, output_padding=0),
+            nn.BatchNorm2d(378),
+            nn.ELU(True),
+            nn.ConvTranspose2d(378, 192, 2, stride=2, padding=0, output_padding=0),
+            nn.BatchNorm2d(192),
+            nn.ELU(True),
+            nn.ConvTranspose2d(192, 96, 2, stride=2, padding=0, output_padding=0),
+            nn.BatchNorm2d(96),
+            nn.ConvTranspose2d(96, 48, 2, stride=2, padding=0, output_padding=0),
+            nn.BatchNorm2d(48),
+            nn.ELU(True),
+            nn.ConvTranspose2d(48, 24, 2, stride=2, padding=0, output_padding=0),
+            nn.BatchNorm2d(24),
+            nn.ELU(True),
+            nn.ConvTranspose2d(24, 1, 2, stride=2, padding=0, output_padding=0),
+
         )
 
         self.decoder= nn.Sequential(self.decoder_lin, self.unflatten[0], self.decoder_cnn)
@@ -261,7 +285,7 @@ class convAE(Reduction, ANN):
         plt.figure()
         plt.plot(xx, self.loss_trend, 'r')
         plt.title(f"conv_ae_{epochs}epochs loss error")
-        plt.savefig(f"Error_training_convAE_{epochs}epochs.pdf", format='pdf',bbox_inches='tight',pad_inches = 0)
+        plt.savefig(f"Error_training_convAE_{epochs}epochs_6_conv_layers.pdf", format='pdf',bbox_inches='tight',pad_inches = 0)
         plt.close()
 
         return optimizer
@@ -369,19 +393,23 @@ test_data = np.expand_dims(test_dataset, axis=1)
 
 print("test_data_shape", test_data.shape)
 
-f = torch.nn.ReLU
+f = torch.nn.ELU
 low_dim = 5
 optim = torch.optim.Adam
-epochs = 10000
+epochs = 2000
 
 conv_ae = convAE([14], [14], f(), f(), epochs)
 
 #Saving
+start = time()
 conv_ae.fit(train_data) 
+end = time()
 
-torch.save(conv_ae, f'./Stochastic_results/conv_AE_{epochs}epochs.pt')
+print("time required for the trianing", end-start)
 
-#conv_ae = torch.load(f'./Stochastic_results/conv_AE_{epochs}epochs.pt')
+torch.save(conv_ae, f'./Stochastic_results/conv_AE_{epochs}epochs_6_conv_layers.pt')
+
+#conv_ae = torch.load(f'./Stochastic_results/conv_AE_{epochs}epochs_6_conv_layers.pt')
 
 #training reduction-expansion
 reduced_train_snapshots = conv_ae.reduce(train_data)
@@ -391,6 +419,7 @@ expanded_train_snapshots = conv_ae.expand(reduced_train_snapshots)
 reduced_test_snapshots = conv_ae.reduce(test_data)
 expanded_test_snapshots = conv_ae.expand(reduced_test_snapshots)
 
+#print("ciao")
 e_test_snapshots = expanded_test_snapshots.T.squeeze()
 model_testing_err = np.zeros(len(e_test_snapshots))
 xxx = np.zeros(len(e_test_snapshots))
@@ -408,17 +437,18 @@ plt.title(f"Reconstruction of the Testing FOM snapshot with convAE_{epochs} epoc
 plt.ylabel("w relative error")
 plt.xlabel("time")
 
-plt.savefig(f'./Stochastic_results/Reconstruction_Testing_convAE{epochs}epochs-FOM.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+plt.savefig(f'./Stochastic_results/Reconstruction_Testing_convAE{epochs}epochs-FOM_6_conv_layers.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
 plt.close()
 
-#plot error TRAINING
-""" plt.figure()
+""" #plot error TRAINING
+plt.figure()
 plt.semilogy(xxx, model_training_err, 'ro-')
 plt.title(f"Reconstruction of the Training FOM snapshot with convAE_{epochs} epochs")
 plt.ylabel("w relative error")
 plt.xlabel("time")
 
-plt.savefig("Reconstruction_Training__convAE-FOM.pdf", format='pdf',bbox_inches='tight',pad_inches = 0)
-plt.close() """
+plt.savefig("Reconstruction_Training__convAE-FOM_6_conv_layers.pdf", format='pdf',bbox_inches='tight',pad_inches = 0)
+plt.close()  """
 
-print("ciao")
+
+ 
