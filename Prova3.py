@@ -1,5 +1,4 @@
-### SAVING THE MODEL
-
+### Evaluating errors
 """
 Module for FNN-Autoencoders.
 """
@@ -125,13 +124,7 @@ class convAE(Reduction, ANN):
         self.lr = lr
         self.frequency_print = frequency_print
         self.l2_regularization = l2_regularization
-
-    """ def forward(self, x):
-        x = self.encoder_cnn(x)
-        x = self.flatten(x)
-        x = self.encoder_lin(x)   #ritornato da ann
-        return self.tot(x)"""
-    
+ 
 
     def _build_model(self, values):     #for us train_data
         """
@@ -168,31 +161,24 @@ class convAE(Reduction, ANN):
             nn.Conv2d(378, 378, 2, stride=2, padding=0),
             nn.BatchNorm2d(378),
             nn.Conv2d(378, 378, 2, stride=2, padding=0),
-            #nn.Conv2d(378, 378, 2, stride=2, padding=0)
-            # nn.Conv2d(378, 378, 2, stride=2, padding=0)
-            )
+        )
         
 
-            ### Flatten layer
+        ### Flatten layer
         self.flatten = nn.Flatten(start_dim=1)
         ### Linear section
         self.encoder_lin = nn.Sequential(
             nn.Linear(1512, 14),
-            #nn.ReLU(True),
-            #nn.Linear(128, 4)
-        )  #QUI CI METTIAMO list_to_sequential di ann
+        )  
         
         self.encoder= nn.Sequential(self.encoder_cnn, self.flatten, self.encoder_lin)
-        #self.forward(values)
-        #self.tot = nn.Sequential(self.encoder_cnn, self.encoder_lin)
-    
+            
         # layers_decoder = self.layers_decoder.copy()
         # layers_decoder.append(values.shape[1])
         self.decoder_lin = nn.Sequential(
-            nn.Linear(14, 1512))
-            # nn.ReLU(True),
-            # nn.Linear(128, 3 * 3 * 32),
-            # nn.ReLU(True))
+            nn.Linear(14, 1512)
+        )
+           
         
         self.unflatten = nn.Unflatten(dim=1, unflattened_size=(378, 2, 2)),
             
@@ -220,9 +206,8 @@ class convAE(Reduction, ANN):
 
         self.decoder= nn.Sequential(self.decoder_lin, self.unflatten[0], self.decoder_cnn)
         
-        
-
-    def fit(self, values):
+    
+    def fit(self, values, test):
         """
         Build the AE given 'values' and perform training.
 
@@ -249,15 +234,18 @@ class convAE(Reduction, ANN):
             lr=self.lr, weight_decay=self.l2_regularization)
 
         values = self._convert_numpy_to_torch(values)
+        test = self._convert_numpy_to_torch(test)
         
 
         n_epoch = 1
         flag = True
         while flag:
-            #y_tmp = self.encoder(values)
+            
             y_pred = self.decoder(self.encoder(values))
+            y_test = self.decoder(self.encoder(test))
 
             loss = self.loss(y_pred, values)
+            loss_test = self.loss(y_test, test_data)
 
             optimizer.zero_grad()
             loss.backward()
@@ -276,7 +264,7 @@ class convAE(Reduction, ANN):
 
             if (flag is False or
                     n_epoch == 1 or n_epoch % self.frequency_print == 0):
-                print(f'[epoch {n_epoch:6d}]\t{scalar_loss:e}')
+                print(f'[epoch {n_epoch:6d}]\t{scalar_loss:e}\t{loss_test:e}')
 
             n_epoch += 1
 
@@ -339,30 +327,6 @@ class convAE(Reduction, ANN):
         torch.save(self, path)
 
         
-        """ convAE_to_store = copy.copy(self)
-
-        if not encoder_conv:
-            del convAE_to_store.encoder_cnn
-        if not encoder_lin:
-            del convAE_to_store.encoder_lin
-        if not encoder:
-            del convAE_to_store.encoder
-        if not decoder_lin:
-            del convAE_to_store.decoder_lin 
-        if not decoder_cnn:
-            del convAE_to_store.decoder_cnn
-        if not decoder:
-            del convAE_to_store.decoder
-        if not stop_training:
-            del convAE_to_store.stop_training
-        if not loss:
-            del convAE_to_store.loss
-        if not optimizer:
-            del convAE_to_store.optimizer
-        
-        with open(fname, 'wb') as output:
-            pickle.dump(convAE_to_store, output, pickle.HIGHEST_PROTOCOL) """
-
     @staticmethod
     def load(fname):
 
@@ -401,15 +365,15 @@ epochs = 2000
 conv_ae = convAE([14], [14], f(), f(), epochs)
 
 #Saving
-start = time()
+""" start = time()
 conv_ae.fit(train_data) 
-end = time()
+end = time() 
 
 print("time required for the trianing", end-start)
 
-torch.save(conv_ae, f'./Stochastic_results/conv_AE_{epochs}epochs_6_conv_layers.pt')
+torch.save(conv_ae, f'./Stochastic_results/conv_AE_{epochs}epochs_6_conv_layers.pt')"""
 
-#conv_ae = torch.load(f'./Stochastic_results/conv_AE_{epochs}epochs_6_conv_layers.pt')
+conv_ae = torch.load(f'./Stochastic_results/conv_AE_{epochs}epochs_6_conv_layers.pt')
 
 #training reduction-expansion
 reduced_train_snapshots = conv_ae.reduce(train_data)
@@ -422,17 +386,22 @@ expanded_test_snapshots = conv_ae.expand(reduced_test_snapshots)
 #print("ciao")
 e_test_snapshots = expanded_test_snapshots.T.squeeze()
 model_testing_err = np.zeros(len(e_test_snapshots))
-xxx = np.zeros(len(e_test_snapshots))
+
+e_train_snapshots = expanded_train_snapshots.T.squeeze()
+model_training_err = np.zeros(len(e_train_snapshots))
 
 for i in range(len(e_test_snapshots)):
    
     model_testing_err[i] = np.linalg.norm(e_test_snapshots[i] - test_dataset[i][:][:])/np.linalg.norm(test_dataset[i][:][:])
-    xxx[i] = params_testing[i]
 
+for i in range(len(e_train_snapshots)):
+   
+    model_training_err[i] = np.linalg.norm(e_train_snapshots[i] - train_dataset[i][:][:])/np.linalg.norm(train_dataset[i][:][:])
+    
 
 #plot error TESTING
 plt.figure()
-plt.semilogy(xxx, model_testing_err, 'ro-')
+plt.semilogy(params_testing, model_testing_err, 'ro-')
 plt.title(f"Reconstruction of the Testing FOM snapshot with convAE_{epochs} epochs")
 plt.ylabel("w relative error")
 plt.xlabel("time")
@@ -440,15 +409,16 @@ plt.xlabel("time")
 plt.savefig(f'./Stochastic_results/Reconstruction_Testing_convAE{epochs}epochs-FOM_6_conv_layers.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
 plt.close()
 
-""" #plot error TRAINING
+#plot error TRAINING
 plt.figure()
-plt.semilogy(xxx, model_training_err, 'ro-')
+plt.semilogy(params_training, model_training_err, 'ro-')
 plt.title(f"Reconstruction of the Training FOM snapshot with convAE_{epochs} epochs")
 plt.ylabel("w relative error")
 plt.xlabel("time")
 
-plt.savefig("Reconstruction_Training__convAE-FOM_6_conv_layers.pdf", format='pdf',bbox_inches='tight',pad_inches = 0)
-plt.close()  """
+plt.savefig(f'./Stochastic_results/Reconstruction_Training_convAE{epochs}epochs-FOM_6_conv_layers.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+plt.close()
+
 
 
  
