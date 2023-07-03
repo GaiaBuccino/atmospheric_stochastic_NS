@@ -38,6 +38,9 @@ mask_test = np.array(~mask_train)
 
 print(f"snap_testing: {sum(mask_test)}")
 
+disc_snapshots = zz.reshape(200, 256*256)
+disc_params = tt
+
 params_training = tt[mask_train]
 snap_training = zz[mask_train, :]
 snapshots_training = snap_training.reshape(180,256*256)
@@ -49,6 +52,13 @@ np.save("discontinuity_training.npy", snap_training)
 np.save("discontinuity_testing.npy", snap_testing)
 np.save("disc_params_training.npy", params_training)
 np.save("disc_params_testing.npy", params_testing)
+
+np.save("discontinuity_snapshots.npy", disc_snapshots)
+np.save("disc_params.npy", disc_params)
+
+print("disc_data_shape", disc_snapshots.shape)
+print("disc_params_shape", disc_params.shape)
+
 
 train_data = np.expand_dims(snap_training, axis=1)
 test_data = np.expand_dims(snap_testing, axis=1)

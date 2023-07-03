@@ -108,6 +108,7 @@ class convAE(Reduction, ANN):
         self.stop_training = stop_training
         self.n_linear = neurons_linear
         self.loss_trend = []
+        self.loss_trend_test = []
         self.encoder = None
         self.decoder = None
         self.encoder_lin = None
@@ -220,7 +221,7 @@ class convAE(Reduction, ANN):
 
         :param numpy.ndarray values: the (training) values in the points.
         """
-        # values = values.T
+        #values = values.T
         self._build_model(values)
 
         optimizer = self.optimizer(
@@ -228,7 +229,7 @@ class convAE(Reduction, ANN):
             lr=self.lr, weight_decay=self.l2_regularization)
 
         values = self._convert_numpy_to_torch(values)
-        test = self._convert_numpy_to_torch(test)
+        #test = self._convert_numpy_to_torch(test)
         
 
         n_epoch = 1
@@ -236,17 +237,19 @@ class convAE(Reduction, ANN):
         while flag:
             
             y_pred = self.decoder(self.encoder(values))
-            y_test = self.decoder(self.encoder(test))
+            #y_test = self.decoder(self.encoder(test))
 
             loss = self.loss(y_pred, values)
-            loss_test = self.loss(y_test, test)
+            #loss_test = self.loss(y_test, test)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
             scalar_loss = loss.item()
+            #scalar_loss_test = loss_test.item()
             self.loss_trend.append(scalar_loss)
+            #self.loss_trend_test.append(scalar_loss_test)
 
             for criteria in self.stop_training:
                 if isinstance(criteria, int):  # stop criteria is an integer
@@ -258,17 +261,23 @@ class convAE(Reduction, ANN):
 
             if (flag is False or
                     n_epoch == 1 or n_epoch % self.frequency_print == 0):
-                print(f'[epoch {n_epoch:6d}]\t{scalar_loss:e}\t{loss_test:e}')
+                print(f'[epoch {n_epoch:6d}]\t{scalar_loss:e}')#\t{scalar_loss_test:e}')
 
             n_epoch += 1
 
         xx = np.arange(1, n_epoch, 1)
         print(np.shape(xx), np.shape(self.loss_trend))
         plt.figure()
-        plt.plot(xx, self.loss_trend, 'r')
-        plt.title(f"conv_ae_{self.stop_training}epochs loss error")
-        plt.savefig(f"./Stochastic_results/Error_training_convAE_{self.stop_training}epochs_6_conv_layers.pdf", format='pdf',bbox_inches='tight',pad_inches = 0)
+        plt.plot(xx, self.loss_trend, 'b')
+        plt.title(f"conv_ae_{self.stop_training}epochs loss train error")
+        plt.savefig(f"./Stochastic_results/snapshots_tests/Error_training_convAE_{self.stop_training}epochs_6_conv_layers.pdf", format='pdf',bbox_inches='tight',pad_inches = 0)
         plt.close()
+
+        """ plt.figure()
+        plt.plot(xx, self.loss_trend_test, 'r')
+        plt.title(f"conv_ae_{self.stop_training}epochs loss test error")
+        plt.savefig(f"./Stochastic_results/snapshots_tests/Error_testing_convAE_{self.stop_training}epochs_6_conv_layers.pdf", format='pdf',bbox_inches='tight',pad_inches = 0)
+        plt.close() """
 
         return optimizer
 
