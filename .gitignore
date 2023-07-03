@@ -1,3 +1,7 @@
 *.npy
 *.pt
 *.zip
+*.aux
+*.out
+*.gz
+*.log
