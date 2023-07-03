@@ -272,6 +272,8 @@
 
 \begin{document}
 	\title{Tests} 
+
+\section{10000 Epochs $\psi-\omega$}
 	
 \newcommand{\testname}{../Stochastic_results/snapshots_tests/snapshots_6_conv/conv_AE_10000epochs}
  
@@ -302,6 +304,68 @@
 	\caption{Error FOM vs POD-NN and FOM vs reconstruction with conv AE (latent 2 6 14 30)}
 \end{figure}
 
+\newpage
+\section{2000 Epochs $\psi-\omega$}
+\renewcommand{\testname}{../Stochastic_results/snapshots_tests/snapshots_6_conv/conv_AE_2000epochs}
 
+\begin{figure}
+	\newcommand{\pictype}{Error_convAE-FOM}
+	\includegraphics[width=0.49\textwidth]{\testname/2linear_neurons/\pictype.pdf}
+	\includegraphics[width=0.49\textwidth]{\testname/6linear_neurons/\pictype.pdf}\\
+	\includegraphics[width=0.49\textwidth]{\testname/14linear_neurons/\pictype.pdf}
+	\includegraphics[width=0.49\textwidth]{\testname/30linear_neurons/\pictype.pdf}
+	\caption{Error FOM vs reconstruction with conv AE (latent 2 6 14 30)}
+\end{figure}
+
+\begin{figure}
+	\newcommand{\pictype}{Error_POD-inv_transform}
+	\includegraphics[width=0.49\textwidth]{\testname/2linear_neurons/\pictype.pdf}
+	\includegraphics[width=0.49\textwidth]{\testname/6linear_neurons/\pictype.pdf}\\
+	\includegraphics[width=0.49\textwidth]{\testname/14linear_neurons/\pictype.pdf}
+	\includegraphics[width=0.49\textwidth]{\testname/30linear_neurons/\pictype.pdf}
+	\caption{Error FOM vs POD reconstruction and FOM vs reconstruction with conv AE (latent 2 6 14 30)}
+\end{figure}
+
+%\begin{figure}
+%	\newcommand{\pictype}{Error_POD_NN-inv_transform}
+%	\includegraphics[width=0.49\textwidth]{\testname/2linear_neurons/\pictype.pdf}
+%	\includegraphics[width=0.49\textwidth]{\testname/6linear_neurons/\pictype.pdf}\\
+%	\includegraphics[width=0.49\textwidth]{\testname/14linear_neurons/\pictype.pdf}
+%	\includegraphics[width=0.49\textwidth]{\testname/30linear_neurons/\pictype.pdf}
+%	\caption{Error FOM vs POD-NN and FOM vs reconstruction with conv AE (latent 2 6 14 30)}
+%\end{figure}
+
+
+
+\newpage
+\section{2000 Epochs Discontinuous test}
+\renewcommand{\testname}{../Stochastic_results/discontinuity_tests/discontinuity_6_conv/conv_AE_2000epochs}
+
+\begin{figure}
+	\newcommand{\pictype}{Error_convAE-FOM}
+	\includegraphics[width=0.49\textwidth]{\testname/2linear_neurons/\pictype.pdf}
+	\includegraphics[width=0.49\textwidth]{\testname/6linear_neurons/\pictype.pdf}\\
+	\includegraphics[width=0.49\textwidth]{\testname/14linear_neurons/\pictype.pdf}
+	\includegraphics[width=0.49\textwidth]{\testname/30linear_neurons/\pictype.pdf}
+	\caption{Error FOM vs reconstruction with conv AE (latent 2 6 14 30)}
+\end{figure}
+
+\begin{figure}
+	\newcommand{\pictype}{Error_POD-inv_transform}
+	\includegraphics[width=0.49\textwidth]{\testname/2linear_neurons/\pictype.pdf}
+	\includegraphics[width=0.49\textwidth]{\testname/6linear_neurons/\pictype.pdf}\\
+	\includegraphics[width=0.49\textwidth]{\testname/14linear_neurons/\pictype.pdf}
+	\includegraphics[width=0.49\textwidth]{\testname/30linear_neurons/\pictype.pdf}
+	\caption{Error FOM vs POD reconstruction and FOM vs reconstruction with conv AE (latent 2 6 14 30)}
+\end{figure}
+
+%\begin{figure}
+%	\newcommand{\pictype}{Error_POD_NN-inv_transform}
+%	\includegraphics[width=0.49\textwidth]{\testname/2linear_neurons/\pictype.pdf}
+%	\includegraphics[width=0.49\textwidth]{\testname/6linear_neurons/\pictype.pdf}\\
+%	\includegraphics[width=0.49\textwidth]{\testname/14linear_neurons/\pictype.pdf}
+%	\includegraphics[width=0.49\textwidth]{\testname/30linear_neurons/\pictype.pdf}
+%	\caption{Error FOM vs POD-NN and FOM vs reconstruction with conv AE (latent 2 6 14 30)}
+%\end{figure}
 	
 \end{document}
