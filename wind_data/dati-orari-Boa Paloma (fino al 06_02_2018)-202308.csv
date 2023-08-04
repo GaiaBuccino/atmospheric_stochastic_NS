@@ -1,0 +1,28 @@
+mese;giorno;ora UTC*;Pioggia mm;Temp. gradi C;Umidita' %;Vento med km/h;Direzione Vento gradi N;Vento max km/h;Direzione Vento max gradi N;Radiaz. KJ/m2;Pressione hPa;Bagnatura Fogliare min.
+8;3;1.00;-;25.4;72;13;63;19;65;0;-;-
+8;3;2.00;-;25.5;77;16;111;21;65;0;-;-
+8;3;3.00;-;25.8;83;17;175;28;158;0;-;-
+8;3;4.00;-;25.4;77;22;157;29;150;3;-;-
+8;3;5.00;-;25.6;74;21;148;26;145;240;-;-
+8;3;6.00;-;25.6;78;20;201;31;160;670;-;-
+8;3;7.00;-;26.1;78;26;212;38;212;348;-;-
+8;3;8.00;-;26.6;72;25;212;34;211;363;-;-
+8;3;9.00;-;26.9;73;23;213;30;212;783;-;-
+8;3;10.00;-;27.1;72;22;212;29;212;774;-;-
+8;3;11.00;-;27.3;70;21;214;29;211;1277;-;-
+8;3;12.00;-;27.5;71;19;217;24;215;1124;-;-
+8;3;13.00;-;28.0;67;21;211;30;214;1549;-;-
+8;3;14.00;-;28.6;63;19;208;26;211;2284;-;-
+8;3;15.00;-;29.2;62;19;206;29;201;1830;-;-
+8;3;16.00;-;29.4;60;17;194;24;208;1137;-;-
+8;3;17.00;-;29.1;66;16;197;24;193;388;-;-
+8;3;18.00;-;29.0;63;20;205;30;211;92;-;-
+8;3;19.00;-;27.8;73;22;209;30;210;4;-;-
+8;3;20.00;-;27.9;70;21;187;37;166;0;-;-
+8;3;21.00;-;27.5;71;21;184;33;190;0;-;-
+8;3;22.00;-;27.5;71;25;197;39;209;0;-;-
+8;3;23.00;-;27.5;74;25;194;39;203;0;-;-
+8;3;24.00;-;27.4;77;26;209;38;204;12;-;-
+NOTA BENE: l'utilizzo dei dati e delle informazioni disponibili in questa pagina web e relative sottopagine e' soggetto alle condizioni e limitazioni descritte nelle note legali, che l'utente implicitamente accetta
+* ora UTC (ora di Greenwich): per ottenere quella locale bisogna aggiungere 1 o 2 ore rispettivamente nel caso in cui sia in vigore l'ora solare o quella legale
+ARPA FVG - OSMER: pagina generata il 04-08-2023 alle 09:42
