@@ -158,7 +158,6 @@ class convAE(Reduction, ANN):
             nn.Conv2d(378, 378, 2, stride=2, padding=0),
         )
         
-        ### Conv2d(in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1)
 
         ### Flatten layer
         self.flatten = nn.Flatten(start_dim=1)
@@ -203,7 +202,7 @@ class convAE(Reduction, ANN):
         self.decoder= nn.Sequential(self.decoder_lin, self.unflatten[0], self.decoder_cnn)
         
     
-    def fit(self, values, test): #aggiungere i pesi
+    def fit(self, values,test,dim):
         """
         Build the AE given 'values' and perform training.
 
@@ -225,11 +224,6 @@ class convAE(Reduction, ANN):
         #values = values.T
         self._build_model(values)
 
-        if (len(values.shape) != 4):
-            values = values.T
-            values = values.reshape(180,256,256)
-            values = np.expand_dims(values, axis=1)        
-
         optimizer = self.optimizer(
             list(self.encoder.parameters()) + list(self.decoder.parameters()),
             lr=self.lr, weight_decay=self.l2_regularization)
@@ -240,14 +234,12 @@ class convAE(Reduction, ANN):
 
         n_epoch = 1
         flag = True
-        self.loss_trend = []
         while flag:
             
             y_pred = self.decoder(self.encoder(values))
             y_test = self.decoder(self.encoder(test))
 
-            loss = self.loss(y_pred, values)    #moltiplicare sia values sia y_pred per sqrt(peso)
-            #scriverlo senza stravolgere il codice, se non vengono passati parametri deve girare cmq
+            loss = self.loss(y_pred, values)
             loss_test = self.loss(y_test, test)
 
             optimizer.zero_grad()
@@ -280,10 +272,9 @@ class convAE(Reduction, ANN):
         plt.semilogy(xx, self.loss_trend_test, 'r')
         plt.legend(["Train loss","Test loss"])
         plt.title(f"conv_ae_{self.stop_training}epochs loss train error")
-        plt.savefig(f"./Stochastic_results/discontinuity_tests/Error_training_convAE_{self.stop_training}epochs_6_conv_layers_{self.n_linear}neurons.pdf", format='pdf',bbox_inches='tight',pad_inches = 0)
+        plt.savefig(f"./Stochastic_results/discontinuity_tests/Error_training_convAE_{self.stop_training}epochs_6_conv_layers_{dim}neurons.pdf", format='pdf',bbox_inches='tight',pad_inches = 0)
         plt.close()
 
-        
         # plt.figure()
         # plt.semilogy(xx, self.loss_trend_test, 'r')
         # plt.title(f"conv_ae_{self.stop_training}epochs loss test error")
@@ -298,16 +289,6 @@ class convAE(Reduction, ANN):
 
         :param numpy.ndarray X: the input snapshots matrix (stored by column).
         """
-        if (len(X.shape) != 4):
-            X = X.T
-            X = X.reshape(180,256,256)
-            X = np.expand_dims(X, axis=1)
-
-        optimizer = self.optimizer(
-            list(self.encoder.parameters()) + list(self.decoder.parameters()),
-            lr=self.lr, weight_decay=self.l2_regularization)
-
-        #values = self._convert_numpy_to_torch(values)
         X = self._convert_numpy_to_torch(X)#.T
         g = self.encoder(X)
         return g.cpu().detach().numpy().T

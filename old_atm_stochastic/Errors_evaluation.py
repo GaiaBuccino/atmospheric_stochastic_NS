@@ -8,7 +8,6 @@ import conv_ae
 from conv_ae import convAE
 import torch
 from torch import nn
-from scipy.stats import beta
 # import torchvision
 # from torchvision import datasets, transforms
 import numpy as np
@@ -37,10 +36,10 @@ for test in types_test:
 
         # data_FOM = np.load('snap_w.npy')
         # params_FOM = np.load('params.npy')
-        train_FOM = np.load('Data/snap_w_training.npy')
-        test_FOM = np.load('Data/snap_w_testing.npy')
-        params_training = np.load('Data/params_training.npy')
-        params_testing = np.load('Data/params_testing.npy')
+        train_FOM = np.load('snap_w_training.npy')
+        test_FOM = np.load('snap_w_testing.npy')
+        params_training = np.load('params_training.npy')
+        params_testing = np.load('params_testing.npy')
 
         print("data train shape", train_FOM.shape)
         print("data test shape", test_FOM.shape)
@@ -57,16 +56,18 @@ for test in types_test:
         
         #data_FOM = np.load('discontinuity_snapshots.npy')
         #params_FOM = np.load('disc_params.npy')
-        train_FOM = np.load('Data/discontinuity_training.npy')
-        test_FOM = np.load('Data/discontinuity_testing.npy')
-        params_training = np.load('Data/disc_params_training.npy')
-        params_testing = np.load('Data/disc_params_testing.npy')
+        train_FOM = np.load('discontinuity_training.npy')
+        test_FOM = np.load('discontinuity_testing.npy')
+        params_training = np.load('disc_params_training.npy')
+        params_testing = np.load('disc_params_testing.npy')
 
         print("data train FOM shape", train_FOM.shape)  #(180, 256, 256)
         print("data test FOM shape", test_FOM.shape)
 
         #print("params_training", params_training)
         #print("params_testing", params_testing)
+
+    
 
     #setting correct dimensions for convolutional layers (1 input channel)
     train_torch = np.expand_dims(train_FOM, axis=1)
@@ -81,10 +82,12 @@ for test in types_test:
     print("data train POD shape", train_POD.shape)  #180, 65536
     print("data test POD shape", test_POD.shape)    #20, 65536
 
+
+
     fake_f = torch.nn.ELU
     #optim = torch.optim.Adam
     conv_layers = 6
-    epochs = 10
+    epochs = 8000
     fake_val = 2
     neurons_linear = fake_val
 
@@ -116,6 +119,7 @@ for test in types_test:
 
 
     for dim in neurons_linear:
+
         mypath_neurons = f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons'
         #looking for exixting directory or creating a new one
             
@@ -142,7 +146,24 @@ for test in types_test:
             print("The conv_ae specified already exists, loading...")
             conv_ae = torch.load(f'{mypath_neurons}/model_{test}_{conv_layers}conv_{epochs}ep_{dim}lin_neurons.pt') 
 
-        
+        plt.figure()
+
+        plt.imshow(train_FOM[-1],cmap=plt.cm.jet,origin='lower')
+        plt.title(f'Reconstruction FOM')
+        plt.colorbar()
+        plt.clim(0.9, 1.7)
+        plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/FOM_train_last_solution.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+        plt.close()
+        plt.figure()
+
+        plt.imshow(test_FOM[-1],cmap=plt.cm.jet,origin='lower')
+        plt.title(f'ReconstructionFOM')
+        plt.colorbar()
+        plt.clim(0.9, 1.7)
+        plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/FOM_test_last_solution.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+        plt.close()
+                
+
         ann_POD = ANN([16,64,64], nn.Tanh(), [60000, 1e-12])     #da correggere in 60000
         ann_enc = ANN([16,64,64], nn.Tanh(), [60000, 1e-12])
 
@@ -174,6 +195,28 @@ for test in types_test:
                 for jj in range(len(test_FOM)):
                 
                     test_err_conv[jj] = np.linalg.norm(e_test[jj] - test_FOM[jj])/np.linalg.norm(test_FOM[jj])
+
+                
+                real_convae_train = e_train[-1].reshape((256, 256))
+                real_convae_test = e_test[-1].reshape((256, 256))
+
+                plt.figure()
+
+                plt.imshow(real_convae_train,cmap=plt.cm.jet,origin='lower')
+                plt.title(f'Reconstruction{type_err}')
+                plt.colorbar()
+                plt.clim(0.9, 1.7)
+                plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/Reconstruction_{type_err}_train_last.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+                plt.close()
+
+                plt.figure()
+
+                plt.imshow(real_convae_test,cmap=plt.cm.jet,origin='lower')
+                plt.title(f'Reconstruction{type_err}')
+                plt.colorbar()
+                plt.clim(0.9, 1.7)
+                plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/Reconstruction_{type_err}_test_last.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+                plt.close()
 
                 # #plot error TRAINING
                 # plt.figure()
@@ -222,6 +265,19 @@ for test in types_test:
                     for ii in range(len(train_FOM)):
                     
                         train_err_POD[ii] = np.linalg.norm(train_POD[ii] - pod_e_train[ii])/np.linalg.norm(train_POD[ii])     # POD reconstructed VS FOM
+
+                    
+                    real_pod_train = pod_e_train[-1].reshape((256, 256))
+                    
+
+                    plt.figure()
+
+                    plt.imshow(real_pod_train,cmap=plt.cm.jet,origin='lower')
+                    plt.title(f'Reconstruction{type_err}')
+                    plt.colorbar()
+                    plt.clim(0.9, 1.7)
+                    plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/Reconstruction_{type_err}_train_last.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+                    plt.close()
 
                     
                     # for jj in range(len(test_FOM)):
@@ -286,6 +342,27 @@ for test in types_test:
                         test_err_POD_NN[jj] = np.linalg.norm(test_POD[jj] - pred_sol)/np.linalg.norm(test_POD[jj])
 
                     
+                    idx_train = params_training[-1]
+                    idx_test = params_testing[-1]
+                    real_rom_train = rom.predict(idx_train).reshape((256, 256))
+                    real_rom_test = rom.predict(idx_test).reshape((256, 256))
+                    plt.figure()
+
+                    plt.imshow(real_rom_train,cmap=plt.cm.jet,origin='lower')
+                    plt.title(f'Reconstruction{type_err}')
+                    plt.colorbar()
+                    plt.clim(0.9, 1.7)
+                    plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/Reconstruction_{type_err}_train_last.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+                    plt.close()
+
+                    plt.figure()
+
+                    plt.imshow(real_rom_test,cmap=plt.cm.jet,origin='lower')
+                    plt.title(f'Reconstruction{type_err}')
+                    plt.colorbar()
+                    plt.clim(0.9, 1.7)
+                    plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/Reconstruction_{type_err}_test_last.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+                    plt.close()
                     #plot error TRAINING
                     # plt.figure(figsize=(15, 15))
                     # plt.subplot(2,2,1)
@@ -354,11 +431,7 @@ for test in types_test:
                 print("shape of reconstruct_NN", reconstruct_NN_train.shape)
                 
 
-                for jj in range(len(test_FOM)):
-
-                    pred_sol_NN_enc_test = ann_enc.predict(params_testing[jj]) 
-                    #print("pred_sol_NN_enc_test shape", pred_sol_NN_enc_test.shape)
-                    pred_sol_test.append(np.array(pred_sol_NN_enc_test))
+                pred_sol_test = ann_enc.predict(params_testing) 
                 
                 reconstruct_NN_test = conv_ae.inverse_transform(np.array(pred_sol_test).T).T.squeeze()
                 reconstruct_NN_test.reshape(20, 256*256)
@@ -370,7 +443,27 @@ for test in types_test:
                 for jj in range(len(test_FOM)):
                     test_err_NN_encoder[jj] = np.linalg.norm(test_POD[jj] - reconstruct_NN_test.reshape(20, 256*256)[jj])/np.linalg.norm(test_POD[jj]) 
                 
-                    
+           
+                real_NNenc_train = reconstruct_NN_train[-1].reshape((256, 256))
+                real_NNenc_test = reconstruct_NN_test[-1].reshape((256, 256))
+
+                plt.figure()
+
+                plt.imshow(real_NNenc_train,cmap=plt.cm.jet,origin='lower')
+                plt.title(f'Reconstruction{type_err}')
+                plt.colorbar()
+                plt.clim(0.9, 1.7)
+                plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/Reconstruction_{type_err}_train_last.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+                plt.close()
+                plt.figure()
+
+                plt.imshow(real_NNenc_test,cmap=plt.cm.jet,origin='lower')
+                plt.title(f'Reconstruction{type_err}')
+                plt.colorbar()
+                plt.clim(0.9, 1.7)
+                plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/Reconstruction_{type_err}_test_last.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+                plt.close()
+                
                 #plot error TRAINING
                 # plt.figure(figsize=(15, 15))
                 # plt.subplot(1,2,1)
