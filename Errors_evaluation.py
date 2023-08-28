@@ -5,6 +5,7 @@ Module for FNN-Autoencoders
 """
 import pandas as pd
 import conv_ae
+import pod
 from conv_ae import convAE
 import torch
 from torch import nn
@@ -18,7 +19,7 @@ from ezyrb.ann import ANN
 # import tensorflow as tf
 # import tensorflow_datasets as tfds
 import matplotlib.pyplot as plt
-from ezyrb import POD, RBF, Database, GPR, ANN, AE
+from ezyrb import RBF, Database, GPR, ANN, AE
 from ezyrb import ReducedOrderModel as ROM
 import pickle
 import copy
@@ -84,7 +85,7 @@ for test in types_test:
     fake_f = torch.nn.ELU
     #optim = torch.optim.Adam
     conv_layers = 6
-    epochs = 10
+    epochs = 8000
     fake_val = 2
     neurons_linear = fake_val
 
@@ -106,14 +107,15 @@ for test in types_test:
     if not os.path.isdir(mypath_epochs):
         os.makedirs(mypath_epochs)
 
-    neurons_linear = [14,30]    # 2, 6, 14, 30
+    neurons_linear = [14]    # 2, 6, 14, 30
     #error definition and computation
-    which_error = ["convAE-FOM", "POD-inv_transform", "POD_NN-inv_transform", "NN_encoder-FOM"]  
+    which_error = ["weigthedPOD-inv_transform", "POD-inv_transform"]#, "convAE-FOM", "POD_NN-inv_transform", "NN_encoder-FOM"]
     #db_data = Database(params_FOM, data_FOM)
     db_training = Database(params_training, train_POD)  #train_POD = 180, 65536
     db_testing = Database(params_testing, test_POD)     #test_POD = 20, 65536
     
-
+    podd_e_0= []
+    wpod_e_0 = []
 
     for dim in neurons_linear:
         mypath_neurons = f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons'
@@ -129,7 +131,7 @@ for test in types_test:
 
             conv_ae = convAE([fake_val], [fake_val], fake_f(), fake_f(), epochs, dim)  #epochs and neurons_linear are passed to the conv_ae
             start = time()
-            conv_ae.fit(train_torch, test_torch, dim) 
+            conv_ae.fit(train_torch, test_torch) 
             end = time()
             time_train = end-start
             #capire come salvare in un file la variabile time_train 
@@ -158,6 +160,7 @@ for test in types_test:
         train_err_conv = np.zeros(len(train_FOM))
         test_err_conv = np.zeros(len(test_FOM))
         train_err_POD = np.zeros(len(train_POD))
+        train_err_wPOD = np.zeros(len(train_POD))
         train_err_POD_NN = np.zeros(len(train_POD))
         test_err_POD_NN = np.zeros(len(test_POD))
         train_err_NN_encoder = np.zeros(len(train_POD))
@@ -204,17 +207,22 @@ for test in types_test:
                 plt.semilogy(params_testing, test_err_conv, 'ro-')
                 plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/Error_{type_err}_testing.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
                 plt.close() """
-
-            if type_err == "POD-inv_transform" or "POD_NN-inv_transform":
+            
+            if type_err == "POD-inv_transform" or type_err == "POD_NN-inv_transform":
                 
                 # POD model
-                pod = POD('svd', rank = dim)
-                pod.fit(db_training.snapshots)
-                pod_r_train = pod.transform(db_training.snapshots)
+                print("in POD-inv or POD-NN type_err = ", type_err)
+                podd = pod.POD('svd', rank = dim)    #con 'correlation matrix' viene identica
+                podd.fit(db_training.snapshots.T)
+                pod_r_train = podd.transform(db_training.snapshots.T).T
                 print("shape rom_r_train", pod_r_train.shape)
-                pod_e_train = pod.inverse_transform(pod_r_train)
+                pod_e_train = podd.inverse_transform(pod_r_train.T).T
+                ##wpod_r_train = wpod.transform(db_training.snapshots)
+                ##wpod_e_train = wpod.inverse_transform(pod_r_train)
+                podd_r_0 = podd.transform(db_training.snapshots[0].T).T
+                podd_e_0 = podd.inverse_transform(podd_r_0.T).T
+                podd_e_0 = podd_e_0.reshape((256, 256))
 
-                
                 #test_err_POD = np.zeros(len(test_POD))
 
                 if type_err == "POD-inv_transform":
@@ -222,8 +230,7 @@ for test in types_test:
                     for ii in range(len(train_FOM)):
                     
                         train_err_POD[ii] = np.linalg.norm(train_POD[ii] - pod_e_train[ii])/np.linalg.norm(train_POD[ii])     # POD reconstructed VS FOM
-
-                    
+                        
                     # for jj in range(len(test_FOM)):
                     
                     #     test_err_POD[jj] = np.linalg.norm(test_POD[jj] - pod_e_test[jj])/np.linalg.norm(test_POD[jj])
@@ -258,8 +265,8 @@ for test in types_test:
                     
                 elif type_err == "POD_NN-inv_transform":
 
-                    poddd = POD('svd', rank = dim)
-                    rom = ROM(db_training, poddd, ann_POD)
+                    rom_pod = pod.POD('svd', rank = dim)
+                    rom = ROM(db_training, rom_pod, ann_POD)
 
                 # db training lo facciamo sullo stesso set ma la base ridotta la troviamo con l'encoder della conv AE
                     start_rom = time()
@@ -267,15 +274,11 @@ for test in types_test:
                     end_rom = time()
                     print("time to train rom = ", end_rom - start_rom)
 
-                    
-                    
-                    
                     # r_rom_train = rom.reduction.transform(db_training.parameters.T)
                     # e_rom_train = rom.reduction.inverse_transform(r_rom_train.T).T
                     # e_rom_train = decoded_rom_train.squeeze().reshape(180,65536)
                     # r_rom_test = rom.predict(params_testing)
                     # e_rom_test = rom.reduction.inverse_transform(r_rom_test).T
-
                     
                     for ii in range(len(train_FOM)):
                         pred_sol = rom.predict(params_training[ii])
@@ -285,7 +288,6 @@ for test in types_test:
                         pred_sol = rom.predict(params_testing[jj])
                         test_err_POD_NN[jj] = np.linalg.norm(test_POD[jj] - pred_sol)/np.linalg.norm(test_POD[jj])
 
-                    
                     #plot error TRAINING
                     # plt.figure(figsize=(15, 15))
                     # plt.subplot(2,2,1)
@@ -328,6 +330,31 @@ for test in types_test:
 
                     # plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/Error_{type_err}.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
                     # plt.close()
+
+            if type_err == "weigthedPOD-inv_transform":
+                weights = np.ones(len(params_training)) 
+                #weights = np.load("weights.npy")
+                print("weights shape", weights.shape)             
+                
+                # wPOD model
+                wpod = pod.POD('correlation_matrix', rank = dim)     
+                print("weights = ", weights)
+                wpod.fit(db_training.snapshots.T, weights)
+
+                #print("modes = ",wpod.modes.shape)  # (65536,14)
+                
+                wpod_r_train = wpod.transform(db_training.snapshots.T).T
+                wpod_e_train = wpod.inverse_transform(wpod_r_train.T).T
+                wpod_r_0 = wpod.transform(db_training.snapshots[0].T).T
+                wpod_e_0 = wpod.inverse_transform(wpod_r_0.T).T
+                wpod_e_0 = wpod_e_0.reshape((256, 256))
+                #test_err_POD = np.zeros(len(test_POD))
+
+                for ii in range(len(train_FOM)):
+                #controllare se bisogna moltiplicare o meno l'errore in se' per il peso    
+                    train_err_wPOD[ii] = np.linalg.norm(train_POD[ii] - wpod_e_train[ii])/np.linalg.norm(train_POD[ii])
+                    
+                weighted_error = np.sqrt(np.sum(weights @ train_err_wPOD**2))/np.sqrt(np.sum(weights))  
 
             if type_err == "NN_encoder-FOM":
                 
@@ -424,14 +451,47 @@ for test in types_test:
         plt.semilogy(params_testing, test_err_conv, "s")
         plt.semilogy(params_testing, test_err_POD_NN, "o")
         plt.semilogy(params_testing, test_err_NN_encoder, "d")
-        plt.semilogy(params_training, train_err_POD, ".") 
+        plt.semilogy(params_training, train_err_POD, "*") 
+        plt.semilogy(params_training, train_err_wPOD, ".") 
         plt.semilogy(params_training, train_err_POD_NN, "1")
         plt.semilogy(params_training, train_err_conv, "|")
         plt.semilogy(params_training, train_err_NN_encoder, "x")
         
-        plt.legend(["test_convAE", "test_POD_NN","test_NN+encoder","train_POD_projection", "train_POD_NN", "train_convAE","train_NN+encoder",])
+        plt.legend(["test_convAE", "test_POD_NN","test_NN+encoder","train_POD_projection", "train_wPOD_projection", "train_POD_NN", "train_convAE","train_NN+encoder"])
         #plt.title(f"{type_err}_error_Train")
         plt.ylabel("relative error")
         plt.xlabel("time")
         plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/Errors.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
         plt.close()
+
+        print("shape wpod_modes= ", wpod.modes.shape) #65k,14
+        aa = np.arange(len(wpod.modes[:,0]))
+
+        print("mode size",wpod.modes[:,0].shape)
+
+        #for ii in np.arange(dim):
+            
+            # plt.figure(figsize=(30, 30))
+            # plt.plot(aa,wpod.modes[:,ii],'ro')
+            # #plt.plot(aa,podd.modes[:,ii], 'bo')
+            # plt.legend(["wpod_eigv", "svd_pod_eigv"])
+            # plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/eigv_{ii}.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+            # plt.close()
+            
+              
+        plt.imshow(wpod_e_0,cmap=plt.cm.jet,origin='lower')
+        plt.colorbar()
+        plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/wpod_modes.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+        plt.close()   
+
+        plt.imshow(podd_e_0,cmap=plt.cm.jet,origin='lower')
+
+        plt.colorbar()
+        plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/podd_modes_10.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+        plt.close()   
+        
+        # plt.imshow(podd_sol - wpod_sol ,cmap=plt.cm.jet,origin='lower')
+        # plt.colorbar()
+        # plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/wpod-podd_modes_10.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+        # plt.close()   
+        

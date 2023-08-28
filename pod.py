@@ -190,6 +190,7 @@ class POD(Reduction):
         singular values is, IEEE Transactions on Information Theory 60.8
         (2014): 5040-5053.
         """
+        
         U, s = np.linalg.svd(X, full_matrices=False)[:2]
 
         rank = self._truncation(X, s)
@@ -246,18 +247,35 @@ class POD(Reduction):
             singular values array, the truncated right-singular vectors matrix.
         :rtype: numpy.ndarray, numpy.ndarray, numpy.ndarray
         """
+        if weights is not None:
+            
+            if self.save_memory:
+                corr = np.empty(shape=(X.shape[1], X.shape[1]))
+                for i, i_snap in enumerate(X.T):
+                    for j, k_snap in enumerate(X.T):
 
-        if self.save_memory:
-            corr = np.empty(shape=(X.shape[1], X.shape[1]))
-            for i, i_snap in enumerate(X.T):
-                for j, k_snap in enumerate(X.T):
-                    if i_snap == k_snap:
-                        w = weights[i_snap]
-                    else: w=1
-                    corr[i, j] = w*np.inner(i_snap, k_snap)   #moltiplicare peso per peso
+                        #if i == j:    #i_snap == k_snap:
+                        w = np.sqrt(weights[i])
+                        #else: w=1
+                        corr[i, j] = w*np.inner(i_snap, k_snap)   #moltiplicare peso per peso
 
-        else:
-            corr = np.diag(weights) * X.T.dot(X)   #pre-moltiplicare per la matrice dei pesi
+            else:
+                # print("before corr matr")
+                aa  = X.T.dot(X)
+                print(aa.shape)
+                # print( np.diag(weights).shape )
+                corr = np.diag(np.sqrt(weights)) @ X.T.dot(X)   #pre-moltiplicare per la matrice dei pesi
+                # print("after corr matr")
+        
+        else: 
+            if self.save_memory:
+                corr = np.empty(shape=(X.shape[1], X.shape[1]))
+                for i, i_snap in enumerate(X.T):
+                    for j, k_snap in enumerate(X.T):
+                        corr[i, j] = np.inner(i_snap, k_snap)
+
+            else:
+                corr = X.T.dot(X)
 
         eigs, eigv = np.linalg.eigh(corr)
 
@@ -270,5 +288,8 @@ class POD(Reduction):
         # compute modes
         eigv = eigv[:, eigs > 0]
         U = X.dot(eigv) / s
+
+        print("shape modes = ", U.shape)
+        print(U)
 
         return U[:, :rank], s[:rank]
