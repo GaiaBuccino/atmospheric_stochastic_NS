@@ -217,11 +217,28 @@ for test in types_test:
                 pod_r_train = podd.transform(db_training.snapshots.T).T
                 print("shape rom_r_train", pod_r_train.shape)
                 pod_e_train = podd.inverse_transform(pod_r_train.T).T
-                ##wpod_r_train = wpod.transform(db_training.snapshots)
-                ##wpod_e_train = wpod.inverse_transform(pod_r_train)
-                podd_r_0 = podd.transform(db_training.snapshots[0].T).T
-                podd_e_0 = podd.inverse_transform(podd_r_0.T).T
-                podd_e_0 = podd_e_0.reshape((256, 256))
+                
+                simul_folder = f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/'
+                modes_folder = simul_folder+'pod/'
+
+                os.system(f"mkdir {modes_folder}")
+                for i in range(podd.modes.shape[1]):
+                    plt.imshow(podd.modes[:,i].reshape(256,256),cmap=plt.cm.jet,origin='lower')
+
+                    plt.colorbar()
+                    plt.savefig(modes_folder+'mode_%02d.pdf'%i, format='pdf',bbox_inches='tight',pad_inches = 0)
+                    plt.close()   
+
+
+                plt.imshow(db_training.snapshots[0].reshape(256,256),cmap=plt.cm.jet,origin='lower')
+                plt.colorbar()
+                plt.savefig(simul_folder+'snap_pod_FOM_0.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+                plt.close()   
+                plt.imshow(pod_e_train[0].reshape(256,256),cmap=plt.cm.jet,origin='lower')
+                plt.colorbar()
+                plt.savefig(simul_folder+'snap_pod_rec_0.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+                plt.close()  
+
 
                 #test_err_POD = np.zeros(len(test_POD))
 
@@ -332,8 +349,10 @@ for test in types_test:
                     # plt.close()
 
             if type_err == "weigthedPOD-inv_transform":
-                weights = np.ones(len(params_training)) 
+                #weights = np.ones(len(params_training)) 
                 #weights = np.load("weights.npy")
+                weights = beta.pdf((db_training.parameters-0.3)/2.7,5,2).squeeze()/2.7
+
                 print("weights shape", weights.shape)             
                 
                 # wPOD model
@@ -341,14 +360,34 @@ for test in types_test:
                 print("weights = ", weights)
                 wpod.fit(db_training.snapshots.T, weights)
 
-                #print("modes = ",wpod.modes.shape)  # (65536,14)
+                print("modes = ",wpod.modes.shape)  # (65536,14)
                 
                 wpod_r_train = wpod.transform(db_training.snapshots.T).T
                 wpod_e_train = wpod.inverse_transform(wpod_r_train.T).T
-                wpod_r_0 = wpod.transform(db_training.snapshots[0].T).T
-                wpod_e_0 = wpod.inverse_transform(wpod_r_0.T).T
-                wpod_e_0 = wpod_e_0.reshape((256, 256))
-                #test_err_POD = np.zeros(len(test_POD))
+
+                simul_folder = f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/'
+                modes_folder = simul_folder+'wpod/'
+                os.system(f"mkdir {modes_folder}")
+
+                plt.plot(db_training.parameters, weights, '.')
+                plt.savefig(simul_folder+'param_weights.pdf',bbox_inches='tight',pad_inches = 0)
+                plt.close()
+
+                for i in range(wpod.modes.shape[1]):
+                    plt.imshow(wpod.modes[:,i].reshape(256,256),cmap=plt.cm.jet,origin='lower')
+
+                    plt.colorbar()
+                    plt.savefig(modes_folder+'mode_%02d.pdf'%i, format='pdf',bbox_inches='tight',pad_inches = 0)
+                    plt.close()   
+
+                plt.imshow(db_training.snapshots[0].reshape(256,256),cmap=plt.cm.jet,origin='lower')
+                plt.colorbar()
+                plt.savefig(simul_folder+'snap_wpod_FOM_0.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+                plt.close()   
+                plt.imshow(wpod_e_train[0].reshape(256,256),cmap=plt.cm.jet,origin='lower')
+                plt.colorbar()
+                plt.savefig(simul_folder+'snap_wpod_rec_0.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+                plt.close()   
 
                 for ii in range(len(train_FOM)):
                 #controllare se bisogna moltiplicare o meno l'errore in se' per il peso    
@@ -479,16 +518,8 @@ for test in types_test:
             # plt.close()
             
               
-        plt.imshow(wpod_e_0,cmap=plt.cm.jet,origin='lower')
-        plt.colorbar()
-        plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/wpod_modes.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
-        plt.close()   
+ 
 
-        plt.imshow(podd_e_0,cmap=plt.cm.jet,origin='lower')
-
-        plt.colorbar()
-        plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/podd_modes_10.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
-        plt.close()   
         
         # plt.imshow(podd_sol - wpod_sol ,cmap=plt.cm.jet,origin='lower')
         # plt.colorbar()

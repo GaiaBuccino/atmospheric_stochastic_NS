@@ -277,7 +277,10 @@ class POD(Reduction):
             else:
                 corr = X.T.dot(X)
 
-        eigs, eigv = np.linalg.eigh(corr)
+        if weights is not None:
+            eigs, eigv = np.linalg.eig(corr)
+        else:
+            eigs, eigv = np.linalg.eigh(corr)
 
         ordered_idx = np.argsort(eigs)[::-1]
         eigs = eigs[ordered_idx]
@@ -289,6 +292,8 @@ class POD(Reduction):
         eigv = eigv[:, eigs > 0]
         U = X.dot(eigv) / s
 
+        if weights is not None:
+            U = U/np.linalg.norm(U,axis=0)
         print("shape modes = ", U.shape)
         print(U)
 
