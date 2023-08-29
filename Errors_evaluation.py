@@ -85,7 +85,7 @@ for test in types_test:
     fake_f = torch.nn.ELU
     #optim = torch.optim.Adam
     conv_layers = 6
-    epochs = 8000
+    epochs = 10
     fake_val = 2
     neurons_linear = fake_val
 
@@ -109,11 +109,13 @@ for test in types_test:
 
     neurons_linear = [14]    # 2, 6, 14, 30
     #error definition and computation
-    which_error = ["weigthedPOD-inv_transform", "POD-inv_transform"]#, "convAE-FOM", "POD_NN-inv_transform", "NN_encoder-FOM"]
+    which_error = ["convAE-FOM"] #,"weigthedPOD-inv_transform", "POD-inv_transform"]#, "convAE-FOM", "POD_NN-inv_transform", "NN_encoder-FOM"]
     #db_data = Database(params_FOM, data_FOM)
     db_training = Database(params_training, train_POD)  #train_POD = 180, 65536
     db_testing = Database(params_testing, test_POD)     #test_POD = 20, 65536
     
+    weights = beta.pdf((db_training.parameters-0.3)/2.7,5,2).squeeze()/2.7
+
     podd_e_0= []
     wpod_e_0 = []
 
@@ -129,12 +131,12 @@ for test in types_test:
                 
                 os.makedirs(mypath_neurons)
 
+            print("weights = ", weights)    
+
             conv_ae = convAE([fake_val], [fake_val], fake_f(), fake_f(), epochs, dim)  #epochs and neurons_linear are passed to the conv_ae
-            start = time()
-            conv_ae.fit(train_torch, test_torch) 
-            end = time()
-            time_train = end-start
-            #capire come salvare in un file la variabile time_train 
+            conv_ae.fit(train_torch, weights) 
+
+            
             torch.save(conv_ae, f'{mypath_neurons}/model_{test}_{conv_layers}conv_{epochs}ep_{dim}lin_neurons.pt')
 
         else:
@@ -203,12 +205,8 @@ for test in types_test:
                 # plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/Error_{type_err}.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
                 # plt.close()
 
-                """ plt.figure()
-                plt.semilogy(params_testing, test_err_conv, 'ro-')
-                plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/Error_{type_err}_testing.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
-                plt.close() """
-            
-            if type_err == "POD-inv_transform" or type_err == "POD_NN-inv_transform":
+                          
+            """ if type_err == "POD-inv_transform" or type_err == "POD_NN-inv_transform":
                 
                 # POD model
                 print("in POD-inv or POD-NN type_err = ", type_err)
@@ -435,7 +433,7 @@ for test in types_test:
 
                 for jj in range(len(test_FOM)):
                     test_err_NN_encoder[jj] = np.linalg.norm(test_POD[jj] - reconstruct_NN_test.reshape(20, 256*256)[jj])/np.linalg.norm(test_POD[jj]) 
-                
+                 """
                     
                 #plot error TRAINING
                 # plt.figure(figsize=(15, 15))
@@ -503,11 +501,11 @@ for test in types_test:
         plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/Errors.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
         plt.close()
 
-        print("shape wpod_modes= ", wpod.modes.shape) #65k,14
-        aa = np.arange(len(wpod.modes[:,0]))
+        #print("shape wpod_modes= ", wpod.modes.shape) #65k,14
+        """  aa = np.arange(len(wpod.modes[:,0]))
 
         print("mode size",wpod.modes[:,0].shape)
-
+        """
         #for ii in np.arange(dim):
             
             # plt.figure(figsize=(30, 30))

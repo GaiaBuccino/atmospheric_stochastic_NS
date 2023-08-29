@@ -63,6 +63,14 @@ class convAE(Reduction, ANN):
         >>> reduced_snapshots = ae.reduce(snapshots)
         >>> expanded_snapshots = ae.expand(reduced_snapshots)
     """
+
+    def weighted_mse_loss(input, target, weights = None):
+        
+        weightsss = torch.from_numpy(weights)
+        input = input.squeeze().reshape(180,256*256)
+        target = target.squeeze().reshape(180,256*256)
+        return torch.sum(weightsss.double() * (input - target).T ** 2)
+    
     def __init__(self,
                  layers_encoder,
                  layers_decoder,
@@ -70,12 +78,13 @@ class convAE(Reduction, ANN):
                  function_decoder,
                  stop_training,
                  neurons_linear,
-                 loss=None,
+                 loss=weighted_mse_loss,
                  optimizer=torch.optim.Adam,
                  lr=0.001,
                  l2_regularization=0,
                  frequency_print=10,
-                 last_identity=True
+                 last_identity=True,
+                 weights = None
                  ):
 
         if layers_encoder[-1] != layers_decoder[0]:
@@ -83,6 +92,9 @@ class convAE(Reduction, ANN):
 
         if loss is None:
             loss = torch.nn.MSELoss()
+        # elif weights is not None:
+        #     loss = weighted_mse_loss(self, values, weights)
+
 
         if not isinstance(function_encoder, list):
             # Single activation function passed
@@ -108,7 +120,7 @@ class convAE(Reduction, ANN):
         self.stop_training = stop_training
         self.n_linear = neurons_linear
         self.loss_trend = []
-        self.loss_trend_test = []
+        #self.loss_trend_test = []
         self.encoder = None
         self.decoder = None
         self.encoder_lin = None
@@ -200,10 +212,10 @@ class convAE(Reduction, ANN):
 
         )
 
-        self.decoder= nn.Sequential(self.decoder_lin, self.unflatten[0], self.decoder_cnn)
+        self.decoder= nn.Sequential(self.decoder_lin, self.unflatten[0], self.decoder_cnn) 
         
     
-    def fit(self, values, test): #aggiungere i pesi
+    def fit(self, values, weights): #aggiungere i pesi
         """
         Build the AE given 'values' and perform training.
 
@@ -235,7 +247,7 @@ class convAE(Reduction, ANN):
             lr=self.lr, weight_decay=self.l2_regularization)
 
         values = self._convert_numpy_to_torch(values)
-        test = self._convert_numpy_to_torch(test)
+        #test = self._convert_numpy_to_torch(test)
         
 
         n_epoch = 1
@@ -244,20 +256,20 @@ class convAE(Reduction, ANN):
         while flag:
             
             y_pred = self.decoder(self.encoder(values))
-            y_test = self.decoder(self.encoder(test))
+            #y_test = self.decoder(self.encoder(test))
 
-            loss = self.loss(y_pred, values)    #moltiplicare sia values sia y_pred per sqrt(peso)
+            loss = self.loss(y_pred, values, weights)    #moltiplicare sia values sia y_pred per sqrt(peso)
             #scriverlo senza stravolgere il codice, se non vengono passati parametri deve girare cmq
-            loss_test = self.loss(y_test, test)
+            #loss_test = self.loss(y_test, test)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
             scalar_loss = loss.item()
-            scalar_loss_test = loss_test.item()
+            #scalar_loss_test = loss_test.item()
             self.loss_trend.append(scalar_loss)
-            self.loss_trend_test.append(scalar_loss_test)
+            #self.loss_trend_test.append(scalar_loss_test)
 
             for criteria in self.stop_training:
                 if isinstance(criteria, int):  # stop criteria is an integer
@@ -269,7 +281,7 @@ class convAE(Reduction, ANN):
 
             if (flag is False or
                     n_epoch == 1 or n_epoch % self.frequency_print == 0):
-                print(f'[epoch {n_epoch:6d}]\t{scalar_loss:e}\t{scalar_loss_test:e}')
+                print(f'[epoch {n_epoch:6d}]\t{scalar_loss:e}')#\t{scalar_loss_test:e}')
 
             n_epoch += 1
 
@@ -277,8 +289,8 @@ class convAE(Reduction, ANN):
         print(np.shape(xx), np.shape(self.loss_trend))
         plt.figure()
         plt.semilogy(xx, self.loss_trend, 'b')
-        plt.semilogy(xx, self.loss_trend_test, 'r')
-        plt.legend(["Train loss","Test loss"])
+        #plt.semilogy(xx, self.loss_trend_test, 'r')
+        plt.legend(["Train loss"])#,"Test loss"])
         plt.title(f"conv_ae_{self.stop_training}epochs loss train error")
         plt.savefig(f"./Stochastic_results/discontinuity_tests/Error_training_convAE_{self.stop_training}epochs_6_conv_layers_{self.n_linear}neurons.pdf", format='pdf',bbox_inches='tight',pad_inches = 0)
         plt.close()
@@ -291,7 +303,8 @@ class convAE(Reduction, ANN):
         # plt.close()
 
         return optimizer
-
+    
+    
     def transform(self, X):
         """
         Reduces the given snapshots.
