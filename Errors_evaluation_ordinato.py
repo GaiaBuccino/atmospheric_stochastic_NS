@@ -244,11 +244,20 @@ for test in types_test:
                 wPOD_statistics = {'training error': train_err,
                                   'testing error': test_err,
                                   'training time': time}
+                
+            elif model == "POD-NN":
+
+                ann_POD = ANN([16,64,64], nn.Tanh(), [60000, 1e-12])
+
+                train_err, test_err, time = perform_POD_NN(train_dataset,test_dataset, params_training, params_testing, )
+                POD_NN_statistics = {'training error': train_err,
+                                  'testing error': test_err,
+                                  'training time': time}
 
 
                 
 
-            ann_POD = ANN([16,64,64], nn.Tanh(), [60000, 1e-12])     #da correggere in 60000
+                 #da correggere in 60000
             ann_enc = ANN([16,64,64], nn.Tanh(), [60000, 1e-12])
 
             #initialization UQ tests
