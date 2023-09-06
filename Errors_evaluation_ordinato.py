@@ -40,7 +40,7 @@ def prepare_data(db_type: str, folder: str) -> Tuple[np.ndarray, np.ndarray, np.
 
     return train_FOM, test_FOM, params_training, params_testing
 
-def perform_convAE(train_dataset: np.ndarray, test_dataset: np.ndarray, rank:int, dump_path: str, weights: Optional[np.ndarray] = None) -> Tuple[np.ndarray, np.ndarray, float]:
+def perform_convAE(train_dataset: np.ndarray, test_dataset: np.ndarray, rank:int, dump_path: str, weights: Optional[np.ndarray] = None) -> dict:
     """_summary_
 
     Args:
@@ -49,7 +49,7 @@ def perform_convAE(train_dataset: np.ndarray, test_dataset: np.ndarray, rank:int
         dump_path (str): path where the convAe trained model is saved
 
     Returns:
-        error.squeeze(np.ndarray): vector containing the errors between the FOM simulation and the convAE approximation
+        dict: TBD
     """
 
     tensor_test = np.expand_dims(test_dataset, axis=1) 
@@ -69,9 +69,9 @@ def perform_convAE(train_dataset: np.ndarray, test_dataset: np.ndarray, rank:int
         fake_val = 2
         neurons_linear = fake_val
 
-        # Pod_type = 'classical'
-        # if weights is not None:
-        #     Pod_type = 'weighted'
+        convAE_type = 'classical'
+        if weights is not None:
+            convAE_type = 'weighted'
 
         conv_ae = convAE([fake_val], [fake_val], fake_f(), fake_f(), epochs, neurons_linear)
 
@@ -88,11 +88,15 @@ def perform_convAE(train_dataset: np.ndarray, test_dataset: np.ndarray, rank:int
     pred_test = conv_ae.inverse_transform(conv_ae.transform(tensor_test))
     error_test = pred_test - tensor_test
 
+    statistics = {'model' : f'{convAE_type} convAE',
+                  'rank' : rank,
+                  'training error': error_train,
+                  'testing error': error_test,
+                  'training time': train_time} 
 
-    return error_train.squeeze(), error_test.squeeze(), train_time
+    return statistics
 
-
-def perform_POD(train_dataset: np.ndarray, test_dataset: np.ndarray, rank: int, dump_path: str, weights: Optional[np.ndarray] = None) -> Tuple[np.ndarray, np.ndarray, float]:
+def perform_POD(train_dataset: np.ndarray, test_dataset: np.ndarray, rank: int, dump_path: str, weights: Optional[np.ndarray] = None) -> dict:
     """_summary_
 
     Args:
@@ -107,10 +111,10 @@ def perform_POD(train_dataset: np.ndarray, test_dataset: np.ndarray, rank: int, 
     #since the number  of elements in the first dimension remains the same, the remaining dim has n_elements/n_rows 
     #(n_elements = total elements in the structure)
     method = 'svd'
-    # Pod_type = 'classical'
+    Pod_type = 'classical'
     if weights is not None:
         method = 'correlation_matrix'
-        # Pod_type = 'weighted'
+        Pod_type = 'weighted'
     
     train_POD = train_dataset.reshape(len(train_dataset), -1)
     test_POD = test_dataset.reshape(len(test_dataset), -1)
@@ -125,10 +129,16 @@ def perform_POD(train_dataset: np.ndarray, test_dataset: np.ndarray, rank: int, 
     pred_test = Pod.inverse_transform(Pod.transform(test_POD.T)).T
     error_test = pred_test - test_dataset
 
-    return error_train, error_test, train_time
+    statistics = {'model' : f'{Pod_type} POD',
+                  'rank' : rank,
+                  'training error': error_train,
+                  'testing error': error_test,
+                  'training time': train_time} 
+
+    return statistics
 
 
-def perform_POD_NN(train_dataset: np.ndarray, test_dataset: np.ndarray, params_training:np.ndarray, params_testing:np.ndarray, rank:int, ann:ANN, dump_path:str, weights: Optional[np.ndarray] = None)  -> Tuple[np.ndarray, np.ndarray, float]:
+def perform_POD_NN(train_dataset: np.ndarray, test_dataset: np.ndarray, params_training:np.ndarray, params_testing:np.ndarray, rank:int, ann:ANN, dump_path:str, weights: Optional[np.ndarray] = None)  -> dict:
     """
     perform the POD method learning the coefficients with a neural network
 
@@ -155,10 +165,10 @@ def perform_POD_NN(train_dataset: np.ndarray, test_dataset: np.ndarray, params_t
         db_train = Database(params_training, train_data)
         
         method = 'svd'
-        # Pod_type = 'classical'
+        Pod_type = 'classical'
         if weights is not None:
             method = 'correlation_matrix'
-            # Pod_type = 'weighted'
+            Pod_type = 'weighted'
         rpod = pod.POD(method, weights=weights rank = rank)
         rom = ROM(db_train, rpod, ann)
 
@@ -176,34 +186,68 @@ def perform_POD_NN(train_dataset: np.ndarray, test_dataset: np.ndarray, params_t
     pred_test = rom.predict(params_testing)
     error_test = pred_test - test_data
 
-    return error_train, error_test, train_time
+    statistics = {'model' : f'{Pod_type} POD_NN',
+                  'rank' : rank,
+                  'training error': error_train,
+                  'testing error': error_test,
+                  'training time': train_time} 
+
+    return statistics
+
+def perform_NN_encoder(train_dataset: np.ndarray, test_dataset: np.ndarray, params_training:np.ndarray, params_testing:np.ndarray, rank:int, ann:ANN, dump_path:str, weights: Optional[np.ndarray] = None)  -> dict:    
+
+    tensor_test = np.expand_dims(test_dataset, axis=1) 
+    tensor_train = np.expand_dims(train_dataset, axis=1)     
+
+    if os.path.exists(dump_path):
+        
+        conv_ae = torch.load(dump_path)   
+        #trovare un modo per salvare il tempo di training
+
+    else:
+        
+        fake_f = torch.nn.ELU
+        #optim = torch.optim.Adam
+        conv_layers = 6
+        epochs = 80
+        fake_val = 2
+        neurons_linear = fake_val
+
+        convAE_type = 'classical'
+        if weights is not None:
+            convAE_type = 'weighted'
+
+        conv_ae = convAE([fake_val], [fake_val], fake_f(), fake_f(), epochs, neurons_linear)
+
+        train_time = -time.perf_counter()
+        conv_ae.fit(tensor_train, weights)
+        train_time += time.perf_counter()
+
+        torch.save(conv_ae, dump_path)
+    
+    reduced_train = conv_ae.transform(tensor_train)
+    ann_enc.fit(params_training,reduced_train.T)
+
+    pred_train = conv_ae.inverse_transform(np.array(ann_enc.predict(params_training)).T).T.squeeze()
+    error_train = pred_train - tensor_train
+
+    pred_test = conv_ae.inverse_transform(np.array(ann_enc.predict(params_testing)).T).T.squeeze()
+    error_test = pred_test - tensor_test
+
+    statistics = {'model' : f'{convAE_type} NN_encoder',
+                  'rank' : rank,
+                  'training error': error_train,
+                  'testing error': error_test,
+                  'training time': train_time} 
+
+    return statistics
 
 
-
+if __main__ == 
 
 types_test = ["synthetic_discontinuity", "simulated_gulf"]  #"snapshots" or "discontinuity"
 
 for test in types_test:
-
-    ### DATA LOADING ###
-
-    # if test == "snapshots":
-        
-    #     print("DEALING WITH SNAPSHOTS...")
-
-    #     train_FOM = np.load('Data/snap_w_training.npy')     #(180, 256, 256)
-    #     test_FOM = np.load('Data/snap_w_testing.npy')       #(20, 256, 256)
-    #     params_training = np.load('Data/params_training.npy')   #(180, 1)
-    #     params_testing = np.load('Data/params_testing.npy')     #(20, 1)
-        
-    # elif test == "discontinuity":
-
-    #     print("DEALING WITH DISCONTINUITY...")
-
-    #     train_FOM = np.load('Data/discontinuity_training.npy')      #(180, 256, 256)
-    #     test_FOM = np.load('Data/discontinuity_testing.npy')
-    #     params_training = np.load('Data/disc_params_training.npy')
-    #     params_testing = np.load('Data/disc_params_testing.npy')
 
     train_dataset, test_dataset, params_training, params_testing = prepare_data(test, 'Data')
 
@@ -219,7 +263,8 @@ for test in types_test:
         print(error) 
 
     ranks = [14]    # 2, 6, 14, 30
-    models = ["POD", "wPOD", "POD-NN", "wPOD-NN", "convAE","wconvAE"]
+    models = ["POD", "wPOD", "POD-NN", "wPOD-NN", "convAE","wconvAE", "NN_encoder", "NN_wencoder"]
+    statistics = []
     
     for model in models:
 
@@ -231,31 +276,58 @@ for test in types_test:
                 
             if model == "POD":
 
-                train_err, test_err, time = perform_POD(train_dataset, test_dataset, rank, path)
+                statistics.append(perform_POD(train_dataset, test_dataset, rank, path))
              
-                POD_statistics = {'training error': train_err,
-                                  'testing error': test_err,
-                                  'training time': time} 
-                
             elif model == "wPOD":
 
-                train_err, test_err, time = perform_POD(train_dataset, test_dataset, rank, path, weights = weights)
-             
-                wPOD_statistics = {'training error': train_err,
-                                  'testing error': test_err,
-                                  'training time': time}
-                
+                statistics.append(perform_POD(train_dataset, test_dataset, rank, path, weights))
+
             elif model == "POD-NN":
 
                 ann_POD = ANN([16,64,64], nn.Tanh(), [60000, 1e-12])
-
-                train_err, test_err, time = perform_POD_NN(train_dataset,test_dataset, params_training, params_testing, )
-                POD_NN_statistics = {'training error': train_err,
-                                  'testing error': test_err,
-                                  'training time': time}
-
-
+                statistics.append(perform_POD_NN(train_dataset, test_dataset, params_training, params_testing, rank, ann_POD, path))
                 
+            elif model == "wPOD-NN":
+
+                ann_POD = ANN([16,64,64], nn.Tanh(), [60000, 1e-12])
+                statistics.append(perform_POD_NN(train_dataset, test_dataset, params_training, params_testing, rank, ann_POD, path, weights))
+
+            elif model == "convAE":
+
+                statistics.append(perform_convAE(train_dataset, test_dataset, rank, path))    
+
+            elif model == "wconvAE":
+
+                statistics.append(perform_convAE(train_dataset, test_dataset, rank, path, weights))
+
+            elif model == "NN_encoder":
+
+                ann_enc = ANN([16,64,64], nn.Tanh(), [60000, 1e-12])
+                statistics.append(perform_NN_encoder(train_dataset, test_dataset, params_training, params_testing, rank, ann_enc, path))
+                
+            elif model == "NN_wencoder":
+
+                ann_enc = ANN([16,64,64], nn.Tanh(), [60000, 1e-12])
+                statistics.append(perform_NN_encoder(train_dataset, test_dataset, params_training, params_testing, rank, ann_enc, path, weights))
+
+
+        df = pd.DataFrame(statistics)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
                  #da correggere in 60000
             ann_enc = ANN([16,64,64], nn.Tanh(), [60000, 1e-12])
