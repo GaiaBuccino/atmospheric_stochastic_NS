@@ -18,6 +18,7 @@ prob_synth = prob_synth/H_speed_fix
 dirs = np.linspace(np.min(directions_synth) ,np.max(directions_synth), 300) 
 samples = 180
 directions_train= np.random.choice(dirs, samples, replace=False)
+directions_train= np.random.choice(dirs, samples, replace=False)
 
 print("directions synth = ", directions_synth)
 

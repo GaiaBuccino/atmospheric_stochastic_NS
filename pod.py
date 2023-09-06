@@ -10,10 +10,11 @@ from ezyrb.reduction import Reduction
 
 
 class POD(Reduction):
-    def __init__(self, method='svd', **kwargs):
+    def __init__(self, method='svd', weights=None, **kwargs):
         """
         Perform the Proper Orthogonal Decomposition.
 
+        :param weights: ndarray with the weights for each eigenvector
         :param method: the implementation to use for the computation of the POD
             modes. Default is 'svd'.
         :type method: {'svd', 'randomized_svd', 'correlation_matrix'}
@@ -67,6 +68,8 @@ class POD(Reduction):
         self._modes = None
         self._singular_values = None
 
+        self._weights = weights
+
         method = available_methods.get(method)
         if method is None:
             raise RuntimeError(
@@ -97,14 +100,14 @@ class POD(Reduction):
         """
         return self._singular_values
 
-    def fit(self, X, weights=None):
+    def fit(self, X):
         """
         Create the reduced space for the given snapshots `X` using the
         specified method
 
         :param numpy.ndarray X: the input snapshots matrix (stored by column)
         """
-        self._modes, self._singular_values = self.__method(X,weights)
+        self._modes, self._singular_values = self.__method(X)
         return self
 
     def transform(self, X):
@@ -175,7 +178,7 @@ class POD(Reduction):
 
         return rank
 
-    def _svd(self, X, weights=None):
+    def _svd(self, X):
         """
         Truncated Singular Value Decomposition.
 
@@ -196,7 +199,7 @@ class POD(Reduction):
         rank = self._truncation(X, s)
         return U[:, :rank], s[:rank]
 
-    def _rsvd(self, X, weights=None):
+    def _rsvd(self, X):
         """
         Truncated randomized Singular Value Decomposition.
 
@@ -237,7 +240,7 @@ class POD(Reduction):
         rank = self._truncation(X, s)
         return U[:, :rank], s[:rank]
 
-    def _corrm(self, X, weights=None):
+    def _corrm(self, X):
         """
         Truncated POD calculated with correlation matrix.
 
@@ -247,7 +250,7 @@ class POD(Reduction):
             singular values array, the truncated right-singular vectors matrix.
         :rtype: numpy.ndarray, numpy.ndarray, numpy.ndarray
         """
-        if weights is not None:
+        if self._weights is not None:
             
             if self.save_memory:
                 corr = np.empty(shape=(X.shape[1], X.shape[1]))
@@ -255,7 +258,7 @@ class POD(Reduction):
                     for j, k_snap in enumerate(X.T):
 
                         #if i == j:    #i_snap == k_snap:
-                        w = np.sqrt(weights[i])
+                        w = np.sqrt(self._weights[i])
                         #else: w=1
                         corr[i, j] = w*np.inner(i_snap, k_snap)   #moltiplicare peso per peso
 
@@ -264,7 +267,7 @@ class POD(Reduction):
                 aa  = X.T.dot(X)
                 print(aa.shape)
                 # print( np.diag(weights).shape )
-                corr = np.diag(np.sqrt(weights)) @ X.T.dot(X)   #pre-moltiplicare per la matrice dei pesi
+                corr = np.diag(np.sqrt(self._weights)) @ X.T.dot(X)   #pre-moltiplicare per la matrice dei pesi
                 # print("after corr matr")
         
         else: 
@@ -277,7 +280,7 @@ class POD(Reduction):
             else:
                 corr = X.T.dot(X)
 
-        if weights is not None:
+        if self._weights is not None:
             eigs, eigv = np.linalg.eig(corr)
         else:
             eigs, eigv = np.linalg.eigh(corr)
@@ -292,7 +295,7 @@ class POD(Reduction):
         eigv = eigv[:, eigs > 0]
         U = X.dot(eigv) / s
 
-        if weights is not None:
+        if self._weights is not None:
             U = U/np.linalg.norm(U,axis=0)
         print("shape modes = ", U.shape)
         print(U)
