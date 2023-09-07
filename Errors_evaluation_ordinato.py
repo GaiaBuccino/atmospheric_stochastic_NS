@@ -176,6 +176,9 @@ def perform_POD_NN(train_dataset: np.ndarray, test_dataset: np.ndarray, params_t
     """
     train_data = train_dataset.reshape(len(train_dataset), -1)
     test_data = test_dataset.reshape(len(test_dataset), -1)
+
+    Pod_type = 'classical'
+
     if os.path.exists(dump_path):
         
         rom = ROM.load(dump_path)   
@@ -199,7 +202,7 @@ def perform_POD_NN(train_dataset: np.ndarray, test_dataset: np.ndarray, params_t
         rom.fit()
         train_time += perf_counter()
         
-        os.makedirs(dump_path)
+        #os.makedirs(dump_path)
         print('path',dump_path)
         rom.save(dump_path, save_db = False)
 
@@ -213,14 +216,14 @@ def perform_POD_NN(train_dataset: np.ndarray, test_dataset: np.ndarray, params_t
     variance = 0
 
     if Pod_type == 'weighted':
-        E_value = compute_expected_value(pred_train, weights)
-        variance = compute_variance(train_dataset, pred_train, weights)
+        E_value = compute_expected_value(pred_train.reshape(len(pred_train), -1), weights)
+        variance = compute_variance(train_dataset.reshape(len(pred_train), -1), pred_train, weights)
 
     statistics = {'model' : f'{Pod_type} POD_NN',
                   'rank' : rank,
                   'training error': error_train,
                   'testing error': error_test,
-                  'training time': train_time,
+                  #'training time': train_time,
                   'expected value': E_value,
                   'variance': variance}
                   
@@ -235,15 +238,17 @@ def perform_NN_encoder(train_dataset: np.ndarray, test_dataset: np.ndarray, para
 
     if os.path.exists(dump_path):
         
+        print("Loading existing convAE")
         conv_ae = torch.load(dump_path)   
         #trovare un modo per salvare il tempo di training
 
     else:
         
+        print("Training a new convAE")
         fake_f = torch.nn.ELU
         #optim = torch.optim.Adam
         conv_layers = 6
-        epochs = 10
+        epochs = 25
         fake_val = 2
         neurons_linear = fake_val
 
@@ -253,7 +258,7 @@ def perform_NN_encoder(train_dataset: np.ndarray, test_dataset: np.ndarray, para
         conv_ae.fit(tensor_train)
         train_time += perf_counter()
 
-        #torch.save(conv_ae, dump_path)
+        torch.save(conv_ae, dump_path)
     
     reduced_train = conv_ae.transform(tensor_train)
     ann_enc.fit(params_training,reduced_train.T)
@@ -277,7 +282,7 @@ def perform_NN_encoder(train_dataset: np.ndarray, test_dataset: np.ndarray, para
                   'rank' : rank,
                   'training error': error_train,
                   'testing error': error_test,
-                  'training time': train_time,
+                  #'training time': train_time,
                   'expected value': E_value,
                   'variance': variance} 
 
@@ -301,7 +306,7 @@ def compute_variance(hf_dataset: np.ndarray, lf_dataset:np.ndarray, weigths: np.
     weighted_dataset = np.zeros(hf_dataset.shape[1])
 
     for kk in range(hf_dataset.shape[0]):
-        weighted_dataset[:][kk] = np.linalg.norm((lf_dataset[kk][:]-hf_dataset[kk][:])*np.sqrt(weights[kk]))
+        weighted_dataset[:][kk] = np.linalg.norm((lf_dataset[kk][:] - hf_dataset[kk][:])*np.sqrt(weights[kk]))
     
     var = np.sum(weighted_dataset, axis=0)/np.sum(weights)
 
@@ -321,7 +326,7 @@ for test in types_test:
     #weights = np.load("weights.npy")
     weights = beta.pdf((params_training - 0.3) / 2.7, 5, 2).squeeze() / 2.7
 
-    path = f"./Stochastic_results/{test}_tests"
+    path = f"./Stochastic_results/{test}_tests/"
   
     try:
         os.makedirs(path, exist_ok=True)
@@ -329,65 +334,75 @@ for test in types_test:
         print(error) 
 
     ranks = [14]    # 2, 6, 14, 30
-    models = [ "NN_wencoder"]#, "NN_wencoder"]#"wconvAE"]#"POD", "wPOD",  "convAE","wconvAE"]#, "POD_NN", "wPOD_NN"]#,
+    models = [ "POD_NN", "wPOD_NN"]#"POD", "wPOD", , "convAE", "wconvAE","NN_encoder", "NN_wencoder"
     statistics = []
     
     for model in models:
 
         for rank in ranks:
 
-            directory = f"/{model}_model/rank_{rank}.pt" 
-            new_path = os.path.join(path, directory)
+            directory = f"{model}_model/rank_{rank}" 
+            folders_path = os.path.join(path, directory)
+            try:
+                os.makedirs(folders_path, exist_ok=True)
+            except OSError as error:
+                print(error) 
             
                 
             if model == "POD":
 
                 print(f"performing {model}...")
-                statistics.append(perform_POD(train_dataset, test_dataset, rank, new_path))
+                statistics.append(perform_POD(train_dataset, test_dataset, rank, folders_path))
              
             elif model == "wPOD":
 
                 print(f"performing {model}...")
-                statistics.append(perform_POD(train_dataset, test_dataset, rank, new_path, weights))
+                statistics.append(perform_POD(train_dataset, test_dataset, rank, folders_path, weights))
 
             elif model == "POD_NN":
 
                 print(f"performing {model}...")
                 ann_POD = ANN([16,64,64], nn.Tanh(), [60000, 1e-12])
+                new_path = os.path.join(folders_path, "POD_NN.rom")
                 statistics.append(perform_POD_NN(train_dataset, test_dataset, params_training, params_testing, rank, ann_POD, new_path + ".rom"))
                 
             elif model == "wPOD_NN":
 
                 print(f"performing {model}...")
                 ann_POD = ANN([16,64,64], nn.Tanh(), [60000, 1e-12])
+                new_path = os.path.join(folders_path, "wPOD_NN.rom")
                 statistics.append(perform_POD_NN(train_dataset, test_dataset, params_training, params_testing, rank, ann_POD, new_path, weights))
 
             elif model == "convAE":
 
                 print(f"performing {model}...")
+                new_path = os.path.join(folders_path, "convAE.pt")
                 statistics.append(perform_convAE(train_dataset, test_dataset, rank, new_path))    
 
             elif model == "wconvAE":
 
                 print(f"performing {model}...")
+                new_path = os.path.join(folders_path, "wconvAE.pt")
                 statistics.append(perform_convAE(train_dataset, test_dataset, rank, new_path, weights))
 
             elif model == "NN_encoder":
 
                 print(f"performing {model}...")
-                ann_enc = ANN([16,64,64], nn.Tanh(), [60000, 1e-12])
+                ann_enc = ANN([16,64,64], nn.Tanh(), [600, 1e-12])
+                new_path = os.path.join(folders_path, "NN_encoder.pt")
                 statistics.append(perform_NN_encoder(train_dataset, test_dataset, params_training, params_testing, rank, ann_enc, new_path))
                 
             elif model == "NN_wencoder":
 
                 print(f"performing {model}...")
-                ann_enc = ANN([16,64,64], nn.Tanh(), [60000, 1e-12])
+                ann_enc = ANN([16,64,64], nn.Tanh(), [600, 1e-12])
+                new_path = os.path.join(folders_path, "NN_wencoder.pt")
                 statistics.append(perform_NN_encoder(train_dataset, test_dataset, params_training, params_testing, rank, ann_enc, new_path, weights))
 
 
     df = pd.DataFrame(statistics)
-    print(df)
-    df.to_csv('Statistics.csv', index=False)
+    #print(df)
+    df.to_csv(f'{path}/Statistics.csv', index=False)
 
 
 
