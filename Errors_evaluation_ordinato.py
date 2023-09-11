@@ -41,7 +41,7 @@ def prepare_data(db_type: str, folder: str) -> Tuple[np.ndarray, np.ndarray, np.
 
     return train_FOM, test_FOM, params_training, params_testing
 
-def perform_convAE(train_dataset: np.ndarray, test_dataset: np.ndarray, rank:int, dump_path: str, weights: Optional[np.ndarray] = None) -> dict:
+def perform_convAE(train_dataset: np.ndarray, test_dataset: np.ndarray, rank:int, dump_path: str, weights: Optional[np.ndarray] = None) -> Tuple[np.ndarray, np.ndarray, dict]:
     """_summary_
 
     Args:
@@ -56,27 +56,20 @@ def perform_convAE(train_dataset: np.ndarray, test_dataset: np.ndarray, rank:int
     tensor_train = np.expand_dims(train_dataset, axis=1)     
     tensor_test = np.expand_dims(test_dataset, axis=1) 
     
-    if os.path.exists(dump_path):
-        
-        conv_ae = torch.load(dump_path)   
-        #trovare un modo per salvare il tempo di training
+    fake_f = torch.nn.ELU
+    #optim = torch.optim.Adam
+    conv_layers = 6
+    epochs = 10
+    fake_val = 2
+    neurons_linear = fake_val
 
-    else:
-        
-        fake_f = torch.nn.ELU
-        #optim = torch.optim.Adam
-        conv_layers = 6
-        epochs = 30
-        fake_val = 2
-        neurons_linear = fake_val
+    conv_ae = convAE([fake_val], [fake_val], fake_f(), fake_f(), epochs, neurons_linear)
 
-        conv_ae = convAE([fake_val], [fake_val], fake_f(), fake_f(), epochs, neurons_linear)
+    train_time = -perf_counter()
+    conv_ae.fit(tensor_train)
+    train_time += perf_counter()
 
-        train_time = -perf_counter()
-        conv_ae.fit(tensor_train)
-        train_time += perf_counter()
-
-        #torch.save(conv_ae, dump_path)
+    torch.save(conv_ae, dump_path)
 
     #do testing
     pred_train = conv_ae.inverse_transform(conv_ae.transform(tensor_train)).T
@@ -104,9 +97,9 @@ def perform_convAE(train_dataset: np.ndarray, test_dataset: np.ndarray, rank:int
     
     print(f"{statistics['model']} performed...")
 
-    return statistics
+    return pred_train, pred_test, statistics
 
-def perform_POD(train_dataset: np.ndarray, test_dataset: np.ndarray, rank: int, weights: Optional[np.ndarray] = None) -> dict:
+def perform_POD(train_dataset: np.ndarray, test_dataset: np.ndarray, rank: int, weights: Optional[np.ndarray] = None) -> Tuple[np.ndarray, np.ndarray, dict]:
     """_summary_
 
     Args:
@@ -157,9 +150,9 @@ def perform_POD(train_dataset: np.ndarray, test_dataset: np.ndarray, rank: int, 
 
     print(f"{Pod_type} POD performed...")
 
-    return statistics
+    return pred_train, pred_test, statistics
 
-def perform_POD_NN(train_dataset: np.ndarray, test_dataset: np.ndarray, params_training:np.ndarray, params_testing:np.ndarray, trained: dict, rank:int, ann:ANN, dump_path:str, model_path: str, weights: Optional[np.ndarray] = None)  -> dict:
+def perform_POD_NN(train_dataset: np.ndarray, test_dataset: np.ndarray, params_training:np.ndarray, params_testing:np.ndarray, rank:int, ann:ANN, dump_path:str, weights: Optional[np.ndarray] = None)  -> Tuple[np.ndarray, np.ndarray, dict]:
     """
     perform the POD method learning the coefficients with a neural network
 
@@ -201,7 +194,7 @@ def perform_POD_NN(train_dataset: np.ndarray, test_dataset: np.ndarray, params_t
     train_time += perf_counter()
 
     rom.save(dump_path, save_db = False)
-    trained[model_path] = train_time
+    # trained[model_path] = train_time
 
     #compute errors
     pred_train = rom.predict(params_training)
@@ -226,9 +219,9 @@ def perform_POD_NN(train_dataset: np.ndarray, test_dataset: np.ndarray, params_t
 
     print(f"{Pod_type} POD-NN performed...")
     
-    return statistics
+    return pred_train, pred_test, statistics
 
-def perform_NN_encoder(train_dataset: np.ndarray, test_dataset: np.ndarray, params_training:np.ndarray, params_testing:np.ndarray, rank:int, ann:ANN, dump_path:str, weights: Optional[np.ndarray] = None)  -> dict:    
+def perform_NN_encoder(train_dataset: np.ndarray, test_dataset: np.ndarray, params_training:np.ndarray, params_testing:np.ndarray, rank:int, ann:ANN, dump_path:str, weights: Optional[np.ndarray] = None)  -> Tuple[np.ndarray, np.ndarray, dict]:    
 
     tensor_test = np.expand_dims(test_dataset, axis=1) 
     tensor_train = np.expand_dims(train_dataset, axis=1)     
@@ -244,7 +237,7 @@ def perform_NN_encoder(train_dataset: np.ndarray, test_dataset: np.ndarray, para
     fake_f = torch.nn.ELU
     #optim = torch.optim.Adam
     conv_layers = 6
-    epochs = 30
+    epochs = 10
     fake_val = 2
     neurons_linear = fake_val
 
@@ -283,7 +276,7 @@ def perform_NN_encoder(train_dataset: np.ndarray, test_dataset: np.ndarray, para
 
     print(f"{convAE_type} convAE performed...")
 
-    return statistics
+    return pred_train, pred_test, statistics
 
 def compute_expected_value(dataset: np.ndarray, weights: np.ndarray) -> np.ndarray :
 
@@ -330,8 +323,7 @@ for test in types_test:
 
     ranks = [14]    # 2, 6, 14, 30
 
-    # if os.path.exists(f'{path}/Trained_models.csv'):
-    #trained_models = {}#pd.read_csv('trained_models.csv')
+
     models = ["POD", "wPOD", "POD_NN", "wPOD_NN", "convAE", "wconvAE", "NN_encoder", "NN_wencoder"]
     statistics = []
     
@@ -351,11 +343,10 @@ for test in types_test:
             if os.path.exists(f'{path}/Trained_models.csv'):
                 trained_models = pd.read_csv(f'{path}/Trained_models.csv')
             else:
-                trained_models = pd.DataFrame(columns=['model','rank', 'training error', 
+                trained_models = pd.DataFrame(columns=['rank', 'training error', 
                                                        'testing error', 'training time', 'expected value', 
-                                                       'variance', 'model_path'])
+                                                       'variance', 'model_path','model'])
             
-            print(f"performing {model}...")
             df_model = trained_models.query(f"model == '{model}' and rank == {rank}")    
             
             if len(df_model) == 0:
@@ -364,70 +355,68 @@ for test in types_test:
 
                 if model == "POD":
 
-                    model_stats = perform_POD(train_dataset, test_dataset, rank)
+                    train_sol, test_sol, model_stats = perform_POD(train_dataset, test_dataset, rank)
                     
                 elif model == "wPOD":
 
-                    model_stats = perform_POD(train_dataset, test_dataset, rank, weights)
+                    train_sol, test_sol, model_stats = perform_POD(train_dataset, test_dataset, rank, weights)
 
                 elif model == "POD_NN":
 
-                    print(f"performing {model}...")
                     epochs = 110
                     ann_POD = ANN([16,64,64], nn.Tanh(), [epochs, 1e-12])
                     model_path = f"{model}_{epochs}.rom"
                     new_path = os.path.join(folders_path, model_path)
-                    model_stats = perform_POD_NN(train_dataset, test_dataset, params_training, params_testing, rank, ann_POD, new_path)
+                    train_sol, test_sol, model_stats = perform_POD_NN(train_dataset, test_dataset, params_training, params_testing, rank, ann_POD, new_path)
                     
                 elif model == "wPOD_NN":
 
-                    print(f"performing {model}...")
                     epochs = 110
                     ann_POD = ANN([16,64,64], nn.Tanh(), [epochs, 1e-12])
                     model_path = f"{model}_{epochs}.rom"
                     new_path = os.path.join(folders_path, model_path)
-                    model_stats = perform_POD_NN(train_dataset, test_dataset, params_training, params_testing, rank, ann_POD, new_path,weights)
+                    train_sol, test_sol, model_stats = perform_POD_NN(train_dataset, test_dataset, params_training, params_testing, rank, ann_POD, new_path,weights)
                     
                     
                 elif model == "convAE":
 
-                    print(f"performing {model}...")
                     model_path = f"{model}.pt"
                     new_path = os.path.join(folders_path, model_path)
-                    statistics.append(perform_convAE(train_dataset, test_dataset, rank, new_path))    
+                    train_sol, test_sol, model_stats = perform_convAE(train_dataset, test_dataset, rank, new_path)   
 
                 elif model == "wconvAE":
 
-                    print(f"performing {model}...")
                     model_path = f"{model}.pt"
                     new_path = os.path.join(folders_path, model_path)
-                    statistics.append(perform_convAE(train_dataset, test_dataset, rank, new_path, weights))
+                    train_sol, test_sol, model_stats = perform_convAE(train_dataset, test_dataset, rank, new_path, weights)
 
                 elif model == "NN_encoder":
 
-                    print(f"performing {model}...")
                     ann_enc = ANN([16,64,64], nn.Tanh(), [600, 1e-12])
                     model_path = f"{model}.pt"
                     new_path = os.path.join(folders_path, model_path)
-                    statistics.append(perform_NN_encoder(train_dataset, test_dataset, params_training, params_testing, rank, ann_enc, new_path))
+                    train_sol, test_sol, model_stats = perform_NN_encoder(train_dataset, test_dataset, params_training, params_testing, rank, ann_enc, new_path)
                     
                 elif model == "NN_wencoder":
 
-                    print(f"performing {model}...")
                     ann_enc = ANN([16,64,64], nn.Tanh(), [600, 1e-12])
                     model_path = f"{model}.pt"
                     new_path = os.path.join(folders_path, model_path)
-                    statistics.append(perform_NN_encoder(train_dataset, test_dataset, params_training, params_testing, rank, ann_enc, new_path, weights))
+                    train_sol, test_sol, model_stats = perform_NN_encoder(train_dataset, test_dataset, params_training, params_testing, rank, ann_enc, new_path, weights)
+
 
                 model_stats["model"] = model
-                trained_models = pd.concat(trained_models, pd.DataFrame(model_stats))
+                trained_mod = pd.DataFrame([model_stats])
+                trained_models = pd.concat([trained_models, trained_mod], ignore_index = True)
+                df_trained_models = pd.DataFrame(trained_models)
+                df_trained_models.to_csv(f'{path}/Trained_models.csv', index=False)
                     
             else:
                 print(f"Model {model} of rank {rank} already loaded in the data frame")
     
     
-    df_trained_models = pd.DataFrame(trained_models)
-    # df_stat.to_csv(f'{path}/Statistics.csv', index=False)
+    
+
 
     # with open(f'{path}/Trained_models.csv', 'w') as f:
     #     for key in trained_models.keys():
