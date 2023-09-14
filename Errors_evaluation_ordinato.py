@@ -56,16 +56,24 @@ def perform_convAE(train_dataset: np.ndarray, test_dataset: np.ndarray, rank:int
     """
 
     tensor_train = np.expand_dims(train_dataset, axis=1)     
-    tensor_test = np.expand_dims(test_dataset, axis=1) 
-    
-    fake_f = torch.nn.ELU
-    #optim = torch.optim.Adam
-    #conv_layers = 6
-    epochs = 10
-    fake_val = 2
-    neurons_dense_layer = rank
 
-    conv_ae = convAE([fake_val], [fake_val], fake_f(), fake_f(), epochs, neurons_dense_layer, weights=weights)
+    if os.path.exists(dump_path):
+        
+        conv_ae = torch.load(dump_path)   
+        #trovare un modo per salvare il tempo di training
+
+    else:
+        
+        fake_f = torch.nn.ELU
+        #optim = torch.optim.Adam
+        conv_layers = 6
+        epochs = 80
+        fake_val = 2
+        neurons_linear = fake_val
+
+        # Pod_type = 'classical'
+        # if weights is not None:
+        #     Pod_type = 'weighted'
 
     train_time = -perf_counter()
     conv_ae.fit(tensor_train, weights)
@@ -425,6 +433,14 @@ for test in types_test:
         os.makedirs(path, exist_ok=True)
     except OSError as error:
         print(error) 
+
+    ranks = [14]    # 2, 6, 14, 30
+
+
+    models = ["POD", "wPOD", "POD_NN", "wPOD_NN", "convAE", "wconvAE", "NN_encoder", "NN_wencoder"]
+    statistics = []
+    
+    for model in models:
     
     if test == "synthetic_discontinuity":
         ranks = [10]    # 2, 6, 14, 30
