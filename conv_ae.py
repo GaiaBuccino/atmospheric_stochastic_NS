@@ -23,8 +23,8 @@ class Weighted_loss(nn.Module):
     def forward (self,input, target):
 
         torch_weights = torch.from_numpy(self.weights).double()
-        input = input.squeeze().reshape(len(input), -1)
-        target = target.squeeze().reshape(len(target), -1)
+        input = input.reshape(len(input), -1)
+        target = target.reshape(len(target), -1)
 
         return torch.mean(torch_weights * (input - target).T ** 2)
 
@@ -236,7 +236,7 @@ class convAE(Reduction, ANN):
         self.decoder= nn.Sequential(self.decoder_lin, self.unflatten[0], self.decoder_cnn) 
         
     
-    def fit(self, values): #aggiungere i pesi
+    def fit(self, values, weights= None): #aggiungere i pesi
         """
         Build the AE given 'values' and perform training.
 
@@ -260,7 +260,7 @@ class convAE(Reduction, ANN):
 
         if (len(values.shape) != 4):
             values = values.T
-            values = values.reshape(180,256,256)
+            values = values.reshape(len(values),256,256)
             values = np.expand_dims(values, axis=1)        
 
         optimizer = self.optimizer(
@@ -270,7 +270,11 @@ class convAE(Reduction, ANN):
         values = self._convert_numpy_to_torch(values)
         #test = self._convert_numpy_to_torch(test)
         
-
+        if weights is None:
+            self.loss = torch.nn.MSELoss()
+        elif weights is not None:
+            self.loss = Weighted_loss(weights)
+            
         n_epoch = 1
         flag = True
         self.loss_trend = []
@@ -324,7 +328,7 @@ class convAE(Reduction, ANN):
         """
         if (len(X.shape) != 4):
             X = X.T
-            X = X.reshape(180,256,256)
+            X = X.reshape(len(X),256,256)
             X = np.expand_dims(X, axis=1)
 
         optimizer = self.optimizer(

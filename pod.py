@@ -100,7 +100,7 @@ class POD(Reduction):
         """
         return self._singular_values
 
-    def fit(self, X):
+    def fit(self, X, weights):
         """
         Create the reduced space for the given snapshots `X` using the
         specified method
@@ -263,9 +263,9 @@ class POD(Reduction):
                         corr[i, j] = w*np.inner(i_snap, k_snap)   #moltiplicare peso per peso
 
             else:
-                # print("before corr matr")
-                aa  = X.T.dot(X)
-                print(aa.shape)
+                # # print("before corr matr")
+                # aa  = X.T.dot(X)
+                # print(aa.shape)
                 # print( np.diag(weights).shape )
                 corr = np.diag(np.sqrt(self._weights)) @ X.T.dot(X)   #pre-moltiplicare per la matrice dei pesi
                 # print("after corr matr")
@@ -297,7 +297,7 @@ class POD(Reduction):
 
         if self._weights is not None:
             U = U/np.linalg.norm(U,axis=0)
-        print("shape modes = ", U.shape)
-        print(U)
+        #print("shape modes = ", U.shape)
+        #print(U)
 
         return U[:, :rank], s[:rank]

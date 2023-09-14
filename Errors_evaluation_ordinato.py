@@ -6,19 +6,22 @@ Module for FNN-Autoencoders
 import pandas as pd
 import conv_ae
 import pod
+from rom import ReducedOrderModel as ROM
+
 from conv_ae import convAE
 import torch
 from torch import nn
 from scipy.stats import beta
 import numpy as np
 import matplotlib.pyplot as plt
-from ezyrb import Database, ANN, AE
-from ezyrb import ReducedOrderModel as ROM
+from ezyrb import Database, ANN, AE, RBF, POD
+#from ezyrb import ReducedOrderModel as ROM
 import pickle
 import copy
 import os
-from time import time
+from time import perf_counter
 from typing import Optional, Tuple
+import csv
 
 #Different test possibilities: discontinuity, snapshots
 
@@ -40,7 +43,7 @@ def prepare_data(db_type: str, folder: str) -> Tuple[np.ndarray, np.ndarray, np.
 
     return train_FOM, test_FOM, params_training, params_testing
 
-def perform_convAE(train_dataset: np.ndarray, test_dataset: np.ndarray, rank:int, dump_path: str, weights: Optional[np.ndarray] = None) -> Tuple[np.ndarray, np.ndarray, float]:
+def perform_convAE(train_dataset: np.ndarray, test_dataset: np.ndarray, rank:int, dump_path: str, weights: Optional[np.ndarray] = None) -> Tuple[np.ndarray, np.ndarray, dict]:
     """_summary_
 
     Args:
@@ -49,50 +52,56 @@ def perform_convAE(train_dataset: np.ndarray, test_dataset: np.ndarray, rank:int
         dump_path (str): path where the convAe trained model is saved
 
     Returns:
-        error.squeeze(np.ndarray): vector containing the errors between the FOM simulation and the convAE approximation
+        dict: TBD
     """
 
-    tensor_test = np.expand_dims(test_dataset, axis=1) 
     tensor_train = np.expand_dims(train_dataset, axis=1)     
+    tensor_test = np.expand_dims(test_dataset, axis=1) 
+    
+    fake_f = torch.nn.ELU
+    #optim = torch.optim.Adam
+    #conv_layers = 6
+    epochs = 10
+    fake_val = 2
+    neurons_dense_layer = rank
 
-    if os.path.exists(dump_path):
-        
-        conv_ae = torch.load(dump_path)   
-        #trovare un modo per salvare il tempo di training
+    conv_ae = convAE([fake_val], [fake_val], fake_f(), fake_f(), epochs, neurons_dense_layer, weights=weights)
 
-    else:
-        
-        fake_f = torch.nn.ELU
-        #optim = torch.optim.Adam
-        conv_layers = 6
-        epochs = 80
-        fake_val = 2
-        neurons_linear = fake_val
+    train_time = -perf_counter()
+    conv_ae.fit(tensor_train, weights)
+    train_time += perf_counter()
 
-        # Pod_type = 'classical'
-        # if weights is not None:
-        #     Pod_type = 'weighted'
-
-        conv_ae = convAE([fake_val], [fake_val], fake_f(), fake_f(), epochs, neurons_linear)
-
-        train_time = -time.perf_counter()
-        conv_ae.fit(tensor_train, weights)
-        train_time += time.perf_counter()
-
-        torch.save(conv_ae, dump_path)
+    torch.save(conv_ae, dump_path)
 
     #do testing
-    pred_train = conv_ae.inverse_transform(conv_ae.transform(tensor_train))
+    pred_train = conv_ae.inverse_transform(conv_ae.transform(tensor_train)).T
     error_train = pred_train - tensor_train
 
-    pred_test = conv_ae.inverse_transform(conv_ae.transform(tensor_test))
+    pred_test = conv_ae.inverse_transform(conv_ae.transform(tensor_test)).T
     error_test = pred_test - tensor_test
 
+    convAE_type = 'classical'
+    E_value = []
+    variance = 0
 
-    return error_train.squeeze(), error_test.squeeze(), train_time
+    if weights is not None:
+        convAE_type = 'weighted'
+        E_value = compute_expected_value(pred_train.reshape(len(train_dataset),-1), weights)
+        variance = compute_variance(pred_train.reshape(len(train_dataset), -1), weights)
 
+    statistics = {'model' : f'{convAE_type} convAE',
+                  'rank' : rank,
+                  'training error': error_train,
+                  'testing error': error_test,
+                  'training time': train_time,
+                  'expected value' : E_value,
+                  'variance': variance} 
+    
+    print(f"{statistics['model']} performed...")
 
-def perform_POD(train_dataset: np.ndarray, test_dataset: np.ndarray, rank: int, dump_path: str, weights: Optional[np.ndarray] = None) -> Tuple[np.ndarray, np.ndarray, float]:
+    return pred_train, pred_test, statistics
+
+def perform_POD(train_dataset: np.ndarray, test_dataset: np.ndarray, rank: int, weights: Optional[np.ndarray] = None) -> Tuple[np.ndarray, np.ndarray, dict]:
     """_summary_
 
     Args:
@@ -107,28 +116,45 @@ def perform_POD(train_dataset: np.ndarray, test_dataset: np.ndarray, rank: int, 
     #since the number  of elements in the first dimension remains the same, the remaining dim has n_elements/n_rows 
     #(n_elements = total elements in the structure)
     method = 'svd'
-    # Pod_type = 'classical'
+    Pod_type = 'classical'
+    
     if weights is not None:
         method = 'correlation_matrix'
-        # Pod_type = 'weighted'
+        Pod_type = 'weighted'
     
     train_POD = train_dataset.reshape(len(train_dataset), -1)
     test_POD = test_dataset.reshape(len(test_dataset), -1)
     Pod = pod.POD(method, weights = weights, rank = rank)    
-    train_time = -time.perf_counter()
+    train_time = -perf_counter()
     Pod.fit(train_POD.T)
-    train_time += time.perf_counter()
+    train_time += perf_counter()
 
     pred_train = Pod.inverse_transform(Pod.transform(train_POD.T)).T
-    error_train = pred_train - train_dataset
+    error_train = pred_train - train_POD
 
     pred_test = Pod.inverse_transform(Pod.transform(test_POD.T)).T
-    error_test = pred_test - test_dataset
+    error_test = pred_test - test_POD
 
-    return error_train, error_test, train_time
+    E_value = []
+    variance = 0
 
+    if Pod_type == 'weighted':
+        E_value = compute_expected_value(pred_train, weights)
+        variance = compute_variance(pred_train, weights)
 
-def perform_POD_NN(train_dataset: np.ndarray, test_dataset: np.ndarray, params_training:np.ndarray, params_testing:np.ndarray, rank:int, ann:ANN, dump_path:str, weights: Optional[np.ndarray] = None)  -> Tuple[np.ndarray, np.ndarray, float]:
+    statistics = {'rank' : rank,
+                  'training error': error_train,
+                  'testing error': error_test,
+                  'training time': train_time,
+                  'expected value': E_value,
+                  'variance': variance,
+                  'model_path': None} 
+
+    print(f"{Pod_type} POD performed...")
+
+    return pred_train, pred_test, statistics
+
+def perform_POD_NN(train_dataset: np.ndarray, test_dataset: np.ndarray, params_training:np.ndarray, params_testing:np.ndarray, rank:int, ann:ANN, dump_path:str, weights: Optional[np.ndarray] = None)  -> Tuple[np.ndarray, np.ndarray, dict]:
     """
     perform the POD method learning the coefficients with a neural network
 
@@ -146,29 +172,31 @@ def perform_POD_NN(train_dataset: np.ndarray, test_dataset: np.ndarray, params_t
     """
     train_data = train_dataset.reshape(len(train_dataset), -1)
     test_data = test_dataset.reshape(len(test_dataset), -1)
-    if os.path.exists(dump_path):
-        
-        rom = ROM.load(dump_path)   
-        #trovare il modo di salvare il tempo di training
 
-    else:
-        db_train = Database(params_training, train_data)
-        
-        method = 'svd'
-        # Pod_type = 'classical'
-        if weights is not None:
-            method = 'correlation_matrix'
-            # Pod_type = 'weighted'
-        rpod = pod.POD(method, weights=weights rank = rank)
-        rom = ROM(db_train, rpod, ann)
+    method = 'svd'
+    Pod_type = 'classical'
 
-        # db training lo facciamo sullo stesso set ma la base ridotta la troviamo con l'encoder della conv AE
-        train_time = -time.perf_counter()
-        rom.fit()
-        train_time += time.perf_counter()
+    if weights is not None:
+        method = 'correlation_matrix'
+        Pod_type = 'weighted'
+
+    # if os.path.exists(dump_path):
         
-        rom.save(dump_path, save_db = False)
-    #print("time to train rom = ", end_rom - start_rom)
+    #     rom = ROM.load(dump_path)
+    #     train_time = trained[model_path] 
+    #     #trovare il modo di salvare il tempo di training
+
+    # else:
+    db_train = Database(params_training, train_data)
+    rpod = pod.POD(method, weights=weights, rank = rank)
+    rom = ROM(db_train, rpod, ann)
+
+    train_time = -perf_counter()
+    rom.fit()
+    train_time += perf_counter()
+
+    rom.save(dump_path, save_db = False)
+    # trained[model_path] = train_time
 
     #compute errors
     pred_train = rom.predict(params_training)
@@ -176,34 +204,214 @@ def perform_POD_NN(train_dataset: np.ndarray, test_dataset: np.ndarray, params_t
     pred_test = rom.predict(params_testing)
     error_test = pred_test - test_data
 
-    return error_train, error_test, train_time
+    E_value = []
+    variance = 0
 
+    if Pod_type == 'weighted':
+        E_value = compute_expected_value(pred_train.reshape(len(pred_train), -1), weights)
+        variance = compute_variance(pred_train, weights)
 
+    statistics = {'rank' : rank,
+                  'training error': error_train,
+                  'testing error': error_test,
+                  'training time': train_time,
+                  'expected value': E_value,
+                  'variance': variance,
+                  'model_path': dump_path} 
 
+    print(f"{Pod_type} POD-NN performed...")
+    
+    return pred_train, pred_test, statistics
 
-types_test = ["synthetic_discontinuity", "simulated_gulf"]  #"snapshots" or "discontinuity"
+def perform_NN_encoder(train_dataset: np.ndarray, test_dataset: np.ndarray, params_training:np.ndarray, params_testing:np.ndarray, rank:int, ann:ANN, dump_path:str, weights: Optional[np.ndarray] = None)  -> Tuple[np.ndarray, np.ndarray, dict]:    
+
+    tensor_test = np.expand_dims(test_dataset, axis=1) 
+    tensor_train = np.expand_dims(train_dataset, axis=1)     
+
+    # if os.path.exists(dump_path):
+        
+    #     print("Loading existing convAE")
+    #     conv_ae = torch.load(dump_path)   
+    #     #trovare un modo per salvare il tempo di training
+
+    # else:
+          
+    fake_f = torch.nn.ELU
+    #optim = torch.optim.Adam
+    conv_layers = 6
+    epochs = 10
+    fake_val = 2
+    neurons_linear = fake_val
+
+    conv_ae = convAE([fake_val], [fake_val], fake_f(), fake_f(), epochs, neurons_linear)
+
+    db_train = Database(params_training, train_dataset)
+    Rom = ROM(db_train, conv_ae, ann, weights)
+    train_time = -perf_counter()
+    #conv_ae.fit(tensor_train)
+    Rom.fit(weights)
+    train_time += perf_counter()
+    #torch.save(conv_ae, dump_path)
+    Rom.save(f'{dump_path}')
+    
+    reduced_train = conv_ae.transform(tensor_train)
+    ann_enc.fit(params_training,reduced_train.T)
+
+    pred_train = conv_ae.inverse_transform(np.array(ann_enc.predict(params_training)).T).T.squeeze()
+    error_train = pred_train - tensor_train
+
+    pred_test = conv_ae.inverse_transform(np.array(ann_enc.predict(params_testing)).T).T.squeeze()
+    error_test = pred_test - tensor_test
+
+    convAE_type = 'classical'
+    E_value = []
+    variance = 0
+
+    if weights is not None:
+        convAE_type = 'weighted'
+        E_value = compute_expected_value(pred_train.reshape(len(train_dataset), -1), weights)
+        variance = compute_variance(pred_train.reshape(len(train_dataset), -1), weights)
+
+    statistics = {'rank' : rank,
+                  'training error': error_train,
+                  'testing error': error_test,
+                  'training time': train_time,
+                  'expected value': E_value,
+                  'variance': variance,
+                  'model_path': dump_path} 
+
+    print(f"{convAE_type} convAE performed...")
+
+    return pred_train, pred_test, statistics
+
+def compute_expected_value(dataset: np.ndarray, weights: Optional[np.ndarray] = None) -> np.ndarray :
+
+    weighted_dataset = np.zeros((dataset.shape[0],dataset.shape[1]))
+    
+    if weights is not None:
+        
+        for kk in range(dataset.shape[0]):
+            weighted_dataset[kk][:] = dataset[kk][:]*weights[kk]
+        E_value = np.sum(weighted_dataset, axis=0)/np.sum(weights)
+
+    else:
+        E_value = np.sum(dataset, axis=0)/dataset.shape[0]
+
+    return E_value
+    
+def compute_variance(dataset: np.ndarray, weigths: np.ndarray) -> np.ndarray:   # dataset = (180, 65k)
+
+    avg_sol = compute_expected_value(dataset)
+    var_dataset = np.zeros((dataset.shape[0], dataset.shape[1]))
+
+    for kk in range(dataset.shape[0]):
+
+        var_dataset[kk][:] = np.linalg.norm((dataset[kk][:] - avg_sol)*np.sqrt(weights[kk]))
+    
+    var = np.sum(var_dataset, axis=0)/np.sum(weights)
+
+    return var
+
+def compute_stats(dataset: np.ndarray, trained_model: dict, model:str, rank:int, weigths: np.ndarray) -> dict:
+    
+    if model == 'POD':
+        exp_model = pod.POD()
+    #understand how to load
+    if model=='wPOD'or model == 'POD_NN' or model == 'wPOD_NN' or model == 'NN_encoder' or model == 'NN_wencoder': #"POD", "wPOD"]#, "POD_NN", "wPOD_NN", "convAE", "wconvAE", "NN_encoder", "NN_wencoder"
+        
+        exp_model = ROM.load(f"{trained_model['model_path']}")
+        
+        if model=='POD' or model=='wPOD':
+            exp_model = exp_model.reduction
+
+    elif model == 'convAE' or model == 'wconvAE' or model == 'NN_encoder' or model == 'NN_wencoder':
+
+        exp_model = torch.load(trained_model['model_path'])
+
+    sol = exp_model.expand(exp_model.reduce(dataset))
+    E_value = compute_expected_value(sol, weights)
+    var = compute_variance(sol, weights)
+
+    res_dict = {'model': f'{model}',
+                'expected value': E_value,
+                'variance': var
+                }
+        
+    return res_dict
+
+def perform_method(method:str, train_dataset_line:np.ndarray, test_dataset:np.ndarray, params_training:np.ndarray, params_testing:np.ndarray, rank:int,  dump_path:str, reduction:pod.POD or convAE, approximation:Optional[ANN] = None, weights:Optional[np.ndarray] = None)  -> Tuple[np.ndarray, np.ndarray, dict]:  
+    
+    ### data reshaping ###
+
+    train_dataset_line = train_dataset.reshape(len(train_dataset), -1)
+    test_dataset_line = test_dataset.reshape(len(test_dataset), -1)
+
+    ### fit ###
+    if approximation == None:
+        approximation = ANN([16,64,64], nn.Tanh(), [400, 1e-12])
+
+    db_train = Database(params_training, train_dataset_line)
+    Rom = ROM(db_train, reduction, approximation, weights)
+    train_time = -perf_counter()
+    Rom.fit(weights)
+    train_time += perf_counter()
+    Rom.save(f'{dump_path}.rom')
+
+    ### simple reduction ###
+
+    if 'NN' not in f'{method}':
+
+        if 'convAE' in f'{method}':
+
+            tensor_train = np.expand_dims(train_dataset, axis=1)     
+            tensor_test = np.expand_dims(test_dataset, axis=1) 
+
+            pred_train = reduction.inverse_transform(reduction.transform(tensor_train)).T
+            pred_test = reduction.inverse_transform(reduction.transform(tensor_test)).T
+            pred_train = pred_train.reshape(len(pred_train), -1)
+            pred_test = pred_test.reshape(len(pred_test), -1)
+
+        else:
+            pred_train = reduction.inverse_transform(reduction.transform(train_dataset_line.T)).T
+            pred_test = reduction.inverse_transform(reduction.transform(test_dataset_line.T)).T
+        
+        error_train = pred_train - train_dataset_line        
+        error_test = pred_test - test_dataset_line
+    
+    ### reduction and approximation ###
+
+    else:
+        pred_train = np.zeros((train_dataset_line.shape[0],train_dataset_line.shape[1]))
+        for ii in range(len(params_training)):
+
+            pred_train[ii] = Rom.predict(params_training[ii])
+
+        error_train = pred_train - train_dataset_line
+
+        pred_test = np.zeros((test_dataset_line.shape[0],test_dataset_line.shape[1]))
+        for ii in range(len(params_testing)):
+
+            pred_test[ii] = Rom.predict(params_testing[ii])
+
+        error_test = pred_test - test_dataset_line
+
+    statistics = {'model': method + f'{rank}',
+                  'method': method,
+                  'rank': rank,
+                  'training error': error_train,
+                  'testing error': error_test,
+                  'training time': train_time,
+                  'model_path': dump_path} 
+
+    print(f"{method} performed...")
+
+    return pred_train, pred_test, statistics
+
+### main ###
+
+types_test = ["synthetic_discontinuity"]#"synthetic_discontinuity_stats", "simulated_gulf"]  #"snapshots" or "discontinuity"
 
 for test in types_test:
-
-    ### DATA LOADING ###
-
-    # if test == "snapshots":
-        
-    #     print("DEALING WITH SNAPSHOTS...")
-
-    #     train_FOM = np.load('Data/snap_w_training.npy')     #(180, 256, 256)
-    #     test_FOM = np.load('Data/snap_w_testing.npy')       #(20, 256, 256)
-    #     params_training = np.load('Data/params_training.npy')   #(180, 1)
-    #     params_testing = np.load('Data/params_testing.npy')     #(20, 1)
-        
-    # elif test == "discontinuity":
-
-    #     print("DEALING WITH DISCONTINUITY...")
-
-    #     train_FOM = np.load('Data/discontinuity_training.npy')      #(180, 256, 256)
-    #     test_FOM = np.load('Data/discontinuity_testing.npy')
-    #     params_training = np.load('Data/disc_params_training.npy')
-    #     params_testing = np.load('Data/disc_params_testing.npy')
 
     train_dataset, test_dataset, params_training, params_testing = prepare_data(test, 'Data')
 
@@ -211,386 +419,179 @@ for test in types_test:
     #weights = np.load("weights.npy")
     weights = beta.pdf((params_training - 0.3) / 2.7, 5, 2).squeeze() / 2.7
 
-    path = f'./Stochastic_results/{test}_tests'
+    path = f"./Stochastic_results/synthetic_discontinuity_tests/"
   
     try:
         os.makedirs(path, exist_ok=True)
     except OSError as error:
         print(error) 
-
-    ranks = [14]    # 2, 6, 14, 30
-    models = ["POD", "wPOD", "POD-NN", "wPOD-NN", "convAE","wconvAE"]
     
-    for model in models:
+    if test == "synthetic_discontinuity":
+        ranks = [10]    # 2, 6, 14, 30
 
-        for rank in ranks:
 
-            directory = f'/{model}_model/rank_{rank}.pt' 
-            path = os.path.join(path, directory)
-            
-                
-            if model == "POD":
-
-                train_err, test_err, time = perform_POD(train_dataset, test_dataset, rank, path)
-             
-                POD_statistics = {'training error': train_err,
-                                  'testing error': test_err,
-                                  'training time': time} 
-                
-            elif model == "wPOD":
-
-                train_err, test_err, time = perform_POD(train_dataset, test_dataset, rank, path, weights = weights)
-             
-                wPOD_statistics = {'training error': train_err,
-                                  'testing error': test_err,
-                                  'training time': time}
-
-
-                
-
-            ann_POD = ANN([16,64,64], nn.Tanh(), [60000, 1e-12])     #da correggere in 60000
-            ann_enc = ANN([16,64,64], nn.Tanh(), [60000, 1e-12])
-
-            #initialization UQ tests
-            eee_train = e_train.reshape(180, 65536)
-            UQ_test = 180
-            sol_conv = np.zeros((UQ_test,256*256))
-            sol_POD = np.zeros((UQ_test,256*256))
-            sol_FOM = np.zeros((UQ_test,256*256))
-            exp_FOM = np.zeros(256*256)
-            exp_POD = np.zeros(256*256)
-            exp_convAE = np.zeros(256*256)
-            exp_wconvAE = np.zeros(256*256)
-            exp_wPOD = np.zeros(256*256)
-            var_FOM = np.zeros(256*256)
-            var_POD = np.zeros(256*256)
-            var_convAE = np.zeros(256*256)
-            var_wconvAE = np.zeros(256*256)
-            var_wPOD = np.zeros(256*256)
-
-            for kk in range(UQ_test):
-
-                sol_FOM[:][kk] = train_POD[kk][:]*weights[kk]
-            
-            exp_FOM= np.sum(sol_FOM, axis=0)/np.sum(weights)
-            
-
-            simul_folder = f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{rank}linear_neurons/'
-            UQ_folder = simul_folder+'UQ/'
-            os.system(f"mkdir {UQ_folder}")
-
-            plt.imshow(exp_FOM.reshape(256,256),cmap=plt.cm.jet,origin='lower')
-
-            plt.colorbar()
-            plt.savefig(UQ_folder+'exp_FOM', format='pdf',bbox_inches='tight',pad_inches = 0)
-            plt.close()
-
-            
-            
-            
-            for type_err in models:
-
-                if type_err == "convAE-FOM":
-
-                    for kk in range(UQ_test):
-
-                        sol_conv[:][kk] = eee_train[kk][:]*weights[kk]
-
-                    for ii in range(len(train_dataset)):
-                        
-                        train_err_conv[ii] = np.linalg.norm(e_train[ii] - train_dataset[ii])/np.linalg.norm(train_dataset[ii])  #conv_AE reconstructed VS FOM
-                        
-                    for jj in range(len(test_dataset)):
-                    
-                        test_err_conv[jj] = np.linalg.norm(e_test[jj] - test_dataset[jj])/np.linalg.norm(test_dataset[jj])
-
-                    #for dof in range(eee_train.shape[1]):
-                        
-                    exp_convAE= np.sum(sol_conv, axis=0)/np.sum(weights) 
-
-                    simul_folder = f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{rank}linear_neurons/'
-                    UQ_folder = simul_folder+'UQ/'
-                    os.system(f"mkdir {UQ_folder}")
-
-                    plt.imshow(exp_convAE.reshape(256,256),cmap=plt.cm.jet,origin='lower')
-
-                    plt.colorbar()
-                    plt.savefig(UQ_folder+'exp_convAE', format='pdf',bbox_inches='tight',pad_inches = 0)
-                    plt.close()   
-
-
-                # if type_err == "POD-inv_transform" or type_err == "POD_NN-inv_transform":
-                    
-                #     # POD model
-                #     print("in POD-inv or POD-NN type_err = ", type_err)
-                #     podd = pod.POD('svd', rank = dim)    #con 'correlation matrix' viene identica
-                #     podd.fit(db_training.snapshots.T)
-                #     pod_r_train = podd.transform(db_training.snapshots.T).T
-                #     print("shape rom_r_train", pod_r_train.shape)
-                #     pod_e_train = podd.inverse_transform(pod_r_train.T).T
-                    
-                #     simul_folder = f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/'
-                #     modes_folder = simul_folder+'pod/'
-
-                #     os.system(f"mkdir {modes_folder}")
-                #     for i in range(podd.modes.shape[1]):
-                #         plt.imshow(podd.modes[:,i].reshape(256,256),cmap=plt.cm.jet,origin='lower')
-
-                #         plt.colorbar()
-                #         plt.savefig(modes_folder+'mode_%02d.pdf'%i, format='pdf',bbox_inches='tight',pad_inches = 0)
-                #         plt.close()   
-
-
-                #     plt.imshow(db_training.snapshots[0].reshape(256,256),cmap=plt.cm.jet,origin='lower')
-                #     plt.colorbar()
-                #     plt.savefig(simul_folder+'snap_pod_FOM_0.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
-                #     plt.close()   
-                #     plt.imshow(pod_e_train[0].reshape(256,256),cmap=plt.cm.jet,origin='lower')
-                #     plt.colorbar()
-                #     plt.savefig(simul_folder+'snap_pod_rec_0.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
-                #     plt.close()  
-
-
-                #     #test_err_POD = np.zeros(len(test_POD))
-
-                #     if type_err == "POD-inv_transform":
-
-                #         for ii in range(len(train_FOM)):
-                        
-                #             train_err_POD[ii] = np.linalg.norm(train_POD[ii] - pod_e_train[ii])/np.linalg.norm(train_POD[ii])     # POD reconstructed VS FOM
-                            
-                #         for kk in range(UQ_test):
-
-                #             sol_POD[:][kk] = pod_e_train[kk][:]*weights[kk]
-
-                #         exp_POD= np.sum(sol_POD, axis=0)/np.sum(weights) 
-
-                #         simul_folder = f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/'
-                #         UQ_folder = simul_folder+'UQ/'
-                #         os.system(f"mkdir {UQ_folder}")
-
-                #         plt.imshow(exp_POD.reshape(256,256),cmap=plt.cm.jet,origin='lower')
-
-                #         plt.colorbar()
-                #         plt.savefig(UQ_folder+'exp_POD', format='pdf',bbox_inches='tight',pad_inches = 0)
-                #         plt.close()   
-                    
-
-
-                        # for jj in range(len(test_FOM)):
-                        
-                        #     test_err_POD[jj] = np.linalg.norm(test_POD[jj] - pod_e_test[jj])/np.linalg.norm(test_POD[jj])
-
-
-                        #plot error TRAINING
-                        # POD
-                        # plt.figure(figsize=(15, 15))
-                        # plt.subplot(1,2,1)
-                        # plt.semilogy(params_training, train_err_POD, 'bx-')
-                        # plt.title(f"{type_err}_error_Train")
-                        # plt.ylabel("relative error")
-                        # plt.xlabel("time")
-
-                        # # convAE
-                        # plt.subplot(1,2,2)
-                        # plt.semilogy(params_training, train_err_conv, 'bo-')
-                        # plt.title("convAE_error_Train")
-                        # plt.ylabel("relative error")
-                        # plt.xlabel("time")
-                        
-                        # plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/Error_{type_err}.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
-                        # plt.close()
-
-                        # #single plot
-                        # # POD error
-                        # plt.figure()
-                        # plt.semilogy(params_training, train_err_POD, 'bx-')
-                        # plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/Error_{type_err}_training.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
-                        # plt.close()
-
-                        
-                    # elif type_err == "POD_NN-inv_transform":
-
-                    #     rom_pod = pod.POD('svd', rank = dim)
-                    #     rom = ROM(db_training, rom_pod, ann_POD)
-
-                    # # db training lo facciamo sullo stesso set ma la base ridotta la troviamo con l'encoder della conv AE
-                    #     start_rom = time()
-                    #     rom.fit()
-                    #     end_rom = time()
-                    #     print("time to train rom = ", end_rom - start_rom)
-
-                    #     # r_rom_train = rom.reduction.transform(db_training.parameters.T)
-                    #     # e_rom_train = rom.reduction.inverse_transform(r_rom_train.T).T
-                    #     # e_rom_train = decoded_rom_train.squeeze().reshape(180,65536)
-                    #     # r_rom_test = rom.predict(params_testing)
-                    #     # e_rom_test = rom.reduction.inverse_transform(r_rom_test).T
-                        
-                    #     for ii in range(len(train_FOM)):
-                    #         pred_sol = rom.predict(params_training[ii])
-                    #         train_err_POD_NN[ii] = np.linalg.norm(train_POD[ii] - pred_sol)/np.linalg.norm(train_POD[ii])
-
-                    #     for jj in range(len(test_FOM)):
-                    #         start = time()
-                    #         pred_sol = rom.predict(params_testing[jj])  #passare tutto il set di dati insieme -> start time, predict e stop da posizionare prima del for loop
-                    #         stop = time()-start #salvare in un excel
-                    #         test_err_POD_NN[jj] = np.linalg.norm(test_POD[jj] - pred_sol)/np.linalg.norm(test_POD[jj])
-
-                    #     #plot error TRAINING
-                    #     # plt.figure(figsize=(15, 15))
-                    #     # plt.subplot(2,2,1)
-                    #     # plt.semilogy(params_training, train_err_POD_NN, 'bx-')
-                    #     # plt.title(f"{type_err}_error_Train")
-                    #     # plt.ylabel("relative error")
-                    #     # plt.xlabel("time")
-
-                    #     # plt.subplot(2,2,2)
-                    #     # plt.semilogy(params_training, train_err_conv, 'bo-')
-                    #     # plt.title("convAE_error_Train")
-                    #     # plt.ylabel("relative error")
-                    #     # plt.xlabel("time") 
-
-                    #     # #plot error TESTING
-                    #     # plt.subplot(2,2,3)
-                    #     # plt.semilogy(params_testing, test_err_POD_NN, 'rx-')
-                    #     # plt.title(f"{type_err}_error_Test")
-                    #     # plt.ylabel("relative error")
-                    #     # plt.xlabel("time")
-
-                    #     # plt.subplot(2,2,4)
-                    #     # plt.semilogy(params_testing, test_err_conv, 'ro-')
-                    #     # plt.title("convAE_error_Test")
-                    #     # plt.ylabel("relative error")
-                    #     # plt.xlabel("time")
-                        
-                        
-                    #     # plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/Error_{type_err}_four.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
-                    #     # plt.close()
-
-
-                    #     # plt.figure()
-                    #     # plt.semilogy(params_training, train_err_POD_NN, 'bx-', )
-                    #     # plt.semilogy(params_testing, test_err_POD_NN, 'ro-')
-                    #     # plt.legend(['Train', 'Test'])
-                    #     # #plt.title(f"{type_err}_error_Train")
-                    #     # #plt.ylabel("relative error")
-                    #     # #plt.xlabel("time")
-
-                    #     # plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{dim}linear_neurons/Error_{type_err}.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
-                    #     # plt.close()
-
-                if type_err == "weigthedPOD-inv_transform":
-                    #weights = np.ones(len(params_training)) 
-                    #weights = np.load("weights.npy")
-                    weights = beta.pdf((db_training.parameters-0.3)/2.7,5,2).squeeze()/2.7
-
-                    print("weights shape", weights.shape)             
-                    
-                    # wPOD model
-                    wpod = pod.POD('correlation_matrix', rank = rank)     
-                    print("weights = ", weights)
-                    wpod.fit(db_training.snapshots.T, weights)
-
-                    print("modes = ",wpod.modes.shape)  # (65536,14)
-                    
-                    wpod_r_train = wpod.transform(db_training.snapshots.T).T
-                    wpod_e_train = wpod.inverse_transform(wpod_r_train.T).T
-
-                    simul_folder = f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{rank}linear_neurons/'
-                    modes_folder = simul_folder+'wpod/'
-                    os.system(f"mkdir {modes_folder}")
-
-                    plt.plot(db_training.parameters, weights, '.')
-                    plt.savefig(simul_folder+'param_weights.pdf',bbox_inches='tight',pad_inches = 0)
-                    plt.close()
-
-                    for i in range(wpod.modes.shape[1]):
-                        plt.imshow(wpod.modes[:,i].reshape(256,256),cmap=plt.cm.jet,origin='lower')
-
-                        plt.colorbar()
-                        plt.savefig(modes_folder+'mode_%02d.pdf'%i, format='pdf',bbox_inches='tight',pad_inches = 0)
-                        plt.close()   
-
-                    plt.imshow(db_training.snapshots[0].reshape(256,256),cmap=plt.cm.jet,origin='lower')
-                    plt.colorbar()
-                    plt.savefig(simul_folder+'snap_wpod_FOM_0.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
-                    plt.close()   
-                    plt.imshow(wpod_e_train[0].reshape(256,256),cmap=plt.cm.jet,origin='lower')
-                    plt.colorbar()
-                    plt.savefig(simul_folder+'snap_wpod_rec_0.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
-                    plt.close()   
-
-                    for ii in range(len(train_dataset)):
-                    #controllare se bisogna moltiplicare o meno l'errore in se' per il peso    
-                        train_err_wPOD[ii] = np.linalg.norm(train_POD[ii] - wpod_e_train[ii])/np.linalg.norm(train_POD[ii])
-                        
-                    weighted_error = np.sqrt(np.sum(weights @ train_err_wPOD**2))/np.sqrt(np.sum(weights))  
-
-                if type_err == "NN_encoder-FOM":
-                    
-                    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-                    latent_sol = conv_ae.transform(train_torch)
-                            
-                    ann_enc.fit(params_training,latent_sol.T)
-
-                    # db training lo facciamo sullo stesso set ma la base ridotta la troviamo con l'encoder della conv AE
-                    
-                    pred_sol_train = [] #np.zeros_like((train_POD))
-                    pred_sol_test = []
-
-                    # for ii in range(len(train_FOM)):
-
-                    #     pred_sol_NN_enc_train = ann.predict(params_training[ii]) 
-                    #     #print("pred_sol_NN_enc_train shape", pred_sol_NN_enc_train.shape)
-                    #     pred_sol_train.append(np.array(pred_sol_NN_enc_train))
-                    
-                    pred_sol_train = ann_enc.predict(params_training) 
-
-                    reconstruct_NN_train = conv_ae.inverse_transform(np.array(pred_sol_train).T).T.squeeze()
-                    print("shape of reconstruct_NN", reconstruct_NN_train.shape)
-                    
-
-                    for jj in range(len(test_dataset)):
-
-                        pred_sol_NN_enc_test = ann_enc.predict(params_testing[jj]) 
-                        #print("pred_sol_NN_enc_test shape", pred_sol_NN_enc_test.shape)
-                        pred_sol_test.append(np.array(pred_sol_NN_enc_test))
-                    
-                    reconstruct_NN_test = conv_ae.inverse_transform(np.array(pred_sol_test).T).T.squeeze()
-                    reconstruct_NN_test.reshape(20, 256*256)
-                    #print("shape of reconstruct NN", pred_sol_train.shape)
-
-                    for ii in range(len(train_dataset)):
-                        train_err_NN_encoder[ii] = np.linalg.norm(train_POD[ii] - reconstruct_NN_train.reshape(180, 256*256)[ii])/np.linalg.norm(train_POD[ii]) 
-
-                    for jj in range(len(test_dataset)):
-                        test_err_NN_encoder[jj] = np.linalg.norm(test_POD[jj] - reconstruct_NN_test.reshape(20, 256*256)[jj])/np.linalg.norm(test_POD[jj]) 
-
-            
-            plt.figure(figsize=(15, 15))
-            
-            plt.semilogy(params_testing, test_err_conv, "s")
-            plt.semilogy(params_testing, test_err_POD_NN, "o")
-            plt.semilogy(params_testing, test_err_NN_encoder, "d")
-            plt.semilogy(params_training, train_err_POD, "*") 
-            plt.semilogy(params_training, train_err_wPOD, ".") 
-            plt.semilogy(params_training, train_err_POD_NN, "1")
-            plt.semilogy(params_training, train_err_conv, "|")
-            plt.semilogy(params_training, train_err_NN_encoder, "x")
-            
-            plt.legend(["test_convAE", "test_POD_NN","test_NN+encoder","train_POD_projection", "train_wPOD_projection", "train_POD_NN", "train_convAE","train_NN+encoder"])
-            #plt.title(f"{type_err}_error_Train")
-            plt.ylabel("relative error")
-            plt.xlabel("time")
-            plt.savefig(f'./Stochastic_results/{test}_tests/{test}_{conv_layers}_conv/conv_AE_{epochs}epochs/{rank}linear_neurons/Errors.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
-            plt.close()
-
-            #print("shape wpod_modes= ", wpod.modes.shape) #65k,14
-            """  aa = np.arange(len(wpod.modes[:,0]))
-
-            print("mode size",wpod.modes[:,0].shape)
-            """
-
+        models = ["NN_encoder", "NN_wencoder"]
+        #ok: "convAE", "wconvAE","POD", "wPOD", "POD_NN", "wPOD_NN"
+        statistics = []
         
+        for model in models:
+
+            for rank in ranks:
+
+                directory = f"{model}_model/rank_{rank}" 
+                folders_path = os.path.join(path, directory)
+                try:
+                    os.makedirs(folders_path, exist_ok=True)
+                except OSError as error:
+                    print(error) 
+                
+                #if os.path.exists(f'{path}/Trained_models.csv'):
+
+                if os.path.exists(f'{path}/Trained_models.csv'):
+                    trained_models = pd.read_csv(f'{path}/Trained_models.csv')
+                else:
+                    trained_models = pd.DataFrame(columns=['rank', 'training error', 
+                                                        'testing error', 'training time', 'expected value', 
+                                                        'variance', 'model_path','model'])
+                
+                df_model = trained_models.query(f"model == '{model}' and rank == {rank}")    
+                
+                if len(df_model) == 0:
+
+                    print(f"performing {model}...")
+
+                    if model == "POD":
+                        
+                        Pod = pod.POD('svd', rank=rank)
+                        model_path = f"{model}.rom"
+                        new_path = os.path.join(folders_path, model_path)
+                        train_sol, test_sol, model_stats = perform_method(model, train_dataset, test_dataset, params_training, params_testing, rank, new_path, Pod, weights = None)
+                        
+                    elif model == "wPOD":
+
+                        wPod = pod.POD('correlation_matrix', rank=rank, weights = weights)
+                        model_path = f"{model}.rom"
+                        new_path = os.path.join(folders_path, model_path)
+                        train_sol, test_sol, model_stats = perform_method(model, train_dataset, test_dataset, params_training, params_testing, rank, new_path, wPod, weights=weights)
+
+                    elif model == "POD_NN":
+
+                        epochs = 110
+                        Pod = pod.POD('svd', rank=rank)
+                        ann_POD = ANN([16,64,64], nn.Tanh(), [epochs, 1e-12])
+                        model_path = f"{model}_{epochs}.rom"
+                        new_path = os.path.join(folders_path, model_path)
+                        train_sol, test_sol, model_stats = perform_method(model, train_dataset, test_dataset, params_training, params_testing, rank, new_path, Pod, approximation = ann_POD)
+                        
+                    elif model == "wPOD_NN":
+
+                        epochs = 110
+                        wPod = pod.POD('correlation_matrix', rank=rank, weights = weights)
+                        ann_POD = ANN([16,64,64], nn.Tanh(), [epochs, 1e-12])
+                        model_path = f"{model}_{epochs}.rom"
+                        new_path = os.path.join(folders_path, model_path)
+                        train_sol, test_sol, model_stats = perform_method(model, train_dataset, test_dataset, params_training, params_testing, rank, new_path, wPod, approximation = ann_POD, weights = weights)
+                        
+                    elif model == "convAE":
+
+                        epochs = 10
+                        fake_val = 2
+                        neurons_dense_layer = rank
+                        fake_f = torch.nn.ELU
+
+                        conv_ae = convAE([fake_val], [fake_val], fake_f(), fake_f(), epochs, neurons_dense_layer)
+
+                        model_path = f"{model}.pt"
+                        new_path = os.path.join(folders_path, model_path)
+                        train_sol, test_sol, model_stats = perform_method(model, train_dataset, test_dataset, params_training, params_testing, rank, new_path, conv_ae)
+
+                    elif model == "wconvAE":
+
+                        epochs = 10
+                        fake_val = 2
+                        neurons_dense_layer = rank
+                        fake_f = torch.nn.ELU
+
+                        conv_ae = convAE([fake_val], [fake_val], fake_f(), fake_f(), epochs, neurons_dense_layer, weights=weights)
+
+
+                        model_path = f"{model}.pt"
+                        new_path = os.path.join(folders_path, model_path)
+                        train_sol, test_sol, model_stats = perform_method(model, train_dataset, test_dataset, params_training, params_testing, rank, new_path, conv_ae, weights = weights)
+
+                    elif model == "NN_encoder":
+
+                        fake_f = torch.nn.ELU
+                        #optim = torch.optim.Adam
+                        conv_layers = 6
+                        epochs = 10
+                        fake_val = 2
+                        neurons_linear = fake_val
+
+                        conv_ae = convAE([fake_val], [fake_val], fake_f(), fake_f(), epochs, neurons_linear)
+                        ann_enc = ANN([16,64,64], nn.Tanh(), [600, 1e-12])
+                        model_path = f"{model}.rom"
+                        new_path = os.path.join(folders_path, model_path)
+                        train_sol, test_sol, model_stats = perform_method(model,train_dataset, test_dataset, params_training, params_testing, rank, new_path, conv_ae, ann_enc, weights = None)
+                        
+                    elif model == "NN_wencoder":
+
+                        fake_f = torch.nn.ELU
+                        #optim = torch.optim.Adam
+                        conv_layers = 6
+                        epochs = 10
+                        fake_val = 2
+                        neurons_linear = fake_val
+
+                        conv_ae = convAE([fake_val], [fake_val], fake_f(), fake_f(), epochs, neurons_linear)
+
+                        ann_enc = ANN([16,64,64], nn.Tanh(), [600, 1e-12])
+                        model_path = f"{model}.pt"
+                        new_path = os.path.join(folders_path, model_path)
+                        train_sol, test_sol, model_stats = perform_method(model,train_dataset, test_dataset, params_training, params_testing, rank, new_path, conv_ae, ann_enc, weights)
+
+
+                    model_stats["model"] = [model + f'{rank}']
+                    trained_mod = pd.DataFrame([model_stats], index=model_stats.keys())
+                    trained_models = pd.concat([trained_models, trained_mod], ignore_index = True)
+                    df_trained_models = pd.DataFrame(trained_models)
+                    df_trained_models.to_csv(f'{path}/Trained_models.csv', index=False)
+                        
+                else:
+                    print(f"Model {model} of rank {rank} already loaded in the data frame")
+                    df = trained_models['model'==f'{model}'] 
+                    print(df)
+    
+    elif test == "synthetic_discontinuity_stats":
+        
+        if os.path.exists(f'{path}/Trained_models.csv'):
+            trained_models = pd.read_csv(f'{path}/Trained_models.csv')
+        else:
+            raise ValueError("There are no trained models to compute the statistics")
+        
+        for model in trained_models['model']:
             
+            given_mod = trained_models[trained_models['model']==f'{model}']
+            
+            for rk in given_mod['rank']:
+                
+                df_model = trained_models.query(f"model == '{model}' and rank == {rk}")
+                stats = compute_stats(train_dataset, df_model, model, rk, weights)
+                stats_trained = pd.DataFrame([stats], index=stats.keys())
+                statistics = pd.concat([statistics, stats_trained], ignore_index = True)
+                df_trained_stats = pd.DataFrame(statistics)
+                df_trained_stats.to_csv(f'{path}/Trained_statistics.csv', index=False)
+
+
+    
+    
+
+
+    # with open(f'{path}/Trained_models.csv', 'w') as f:
+    #     for key in trained_models.keys():
+    #         f.write("%s,%s\n"%(key, trained_models[key]))
+    
+
+    
+    
+
