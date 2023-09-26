@@ -22,7 +22,7 @@ from time import time
 
 my_path = os.path.abspath(__file__)
 
-tests = ["synthetic_discontinuity"]
+tests = ["synthetic_discontinuity_stats"]
 
 x0_lim = 0
 y0_lim = 0
@@ -39,7 +39,8 @@ mask_train=[]
 mask_test=[]
 
 for test in tests:
-    if test == "synthetic_discontinuity":
+
+    if 'stats' not in f'{test}':
        
         print(f"Generating {test} data")
         t_dim = 200
@@ -49,7 +50,7 @@ for test in tests:
         mask_train = np.array(mask_train)
         mask_test = np.array(~mask_train)
 
-    elif test == "synthetic_discontinuity_stats":
+    else:
 
         print(f"Dealing with {test} data")
         t_dim = 1001
