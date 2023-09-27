@@ -1,4 +1,5 @@
-### Evaluating errors
+#%%
+# ### Evaluating errors
 """
 Module for FNN-Autoencoders
 
@@ -22,6 +23,7 @@ import os
 from time import perf_counter
 from typing import Optional, Tuple
 import csv
+
 
 #Different test possibilities: discontinuity, snapshots
 
@@ -303,32 +305,42 @@ def compute_expected_value(dataset: np.ndarray, weights: Optional[np.ndarray] = 
         E_value = np.sum(weighted_dataset, axis=0)/np.sum(weights)
 
     else:
-        E_value = np.sum(dataset, axis=0)
+        E_value = np.mean(dataset, axis=0)
 
-    return E_value/dataset.shape[0]
+    return E_value
     
 def compute_variance(dataset: np.ndarray, avg_sol: Optional[np.ndarray] = None, weights: Optional[np.ndarray] = None) -> np.ndarray:   # dataset = (180, 65k)
+    """_summary_
 
+    Args:
+        dataset (np.ndarray): 1000 x 65536
+        avg_sol (Optional[np.ndarray], optional): _description_. Defaults to None.
+        weights (Optional[np.ndarray], optional): _description_. Defaults to None.
+
+    Returns:
+        np.ndarray: _description_
+    """
     if avg_sol.any() == None:
         avg_sol = compute_expected_value(dataset)
 
     var_dataset = np.zeros((dataset.shape[0], dataset.shape[1]))
 
     if weights is not None:
-        
-        for kk in range(dataset.shape[0]):
+        var_dataset[:,:] = (dataset-avg_sol)**2 * weights.reshape((-1,1))
 
-            var_dataset[kk][:] = np.linalg.norm((dataset[kk][:] - avg_sol)*np.sqrt(weights[kk]))
-            var = np.sum(var_dataset, axis=0)/np.sum(weights)
+        # for kk in range(dataset.shape[0]):
+        #     var_dataset[kk,:] = (dataset[kk,:] - avg_sol)**2*weights[kk]
+
+        var = np.sum(var_dataset, axis=0)/np.sum(weights)
 
     else:
-        var_dataset[kk][:] = np.linalg.norm(dataset[kk][:] - avg_sol)
-        var = np.sum(var_dataset, axis=0)
 
-    return var/dataset.shape[0]
+        var_dataset[:,:] = (dataset-avg_sol)**2 
+        var = np.sum(var_dataset, axis=0)/(dataset.shape[0]) 
 
+    return var
 
-def compute_stats(dataset: np.ndarray, trained_model: str, model: str, params: Optional[np.ndarray] = None, weigths: Optional[np.ndarray] = None) -> dict:
+def compute_stats(dataset: np.ndarray, trained_model: str, model: str, E_FOM:np.ndarray, var_FOM:np.ndarray, params: Optional[np.ndarray] = None, weigths: Optional[np.ndarray] = None) -> dict:
     #compute_stats(dataset, model_to_be_loaded, POD14, weights) 
     # if model == 'POD':
     #     exp_model = pod.POD()
@@ -349,9 +361,14 @@ def compute_stats(dataset: np.ndarray, trained_model: str, model: str, params: O
     E_value = compute_expected_value(sol, weights)
     var = compute_variance(sol, E_value, weights)
 
+    error_E = np.linalg.norm(E_value - E_FOM)/np.sqrt(E_value.shape[0])
+    error_var = np.linalg.norm(var - var_FOM)/np.sqrt(E_value.shape[0])
+
     res_dict = {'model': f'{model}',
                 'expected value': E_value,
-                'variance': var
+                'variance': var,
+                'error expected value': error_E,
+                'error variance': error_var
                 }
         
     return res_dict
@@ -418,8 +435,8 @@ def perform_method(method:str, train_dataset:np.ndarray, test_dataset:np.ndarray
     Rom.save(f'{dump_path}')
 
     ### simple reduction ###
-    pred_train = compute_approx(train_dataset, params_training, Rom)
-    pred_test = compute_approx(test_dataset, params_testing, Rom)
+    pred_train = compute_approx(train_dataset, params_training, Rom, method)
+    pred_test = compute_approx(test_dataset, params_testing, Rom, method)
 
     # if 'NN' not in f'{method}':
 
@@ -453,6 +470,7 @@ def perform_method(method:str, train_dataset:np.ndarray, test_dataset:np.ndarray
 
     error_train = pred_train - train_dataset_line
 
+
     # pred_test = np.zeros((test_dataset_line.shape[0],test_dataset_line.shape[1]))
     # for ii in range(len(params_testing)):
 
@@ -474,7 +492,7 @@ def perform_method(method:str, train_dataset:np.ndarray, test_dataset:np.ndarray
 
 ### main ###
 
-types_test = ["synthetic_discontinuity","synthetic_discontinuity_stats"] #"simulated_gulf"]  #"snapshots" or "discontinuity"
+types_test = ["synthetic_discontinuity"] #"simulated_gulf"]  #"snapshots" or "discontinuity"      "synthetic_discontinuity",
 
 for test in types_test:
 
@@ -494,9 +512,10 @@ for test in types_test:
     ranks = [14]    # 2, 6, 14, 30
 
 
-    methods = ["convAE", "wconvAE", "NN_encoder", "NN_wencoder", "POD","wPOD", "POD_NN", "wPOD_NN"],
+    methods = ["POD","wPOD", "POD_NN", "wPOD_NN", "convAE", "wconvAE", "NN_encoder", "NN_wencoder"]
     #ok: "convAE", "wconvAE","POD", "wPOD", "POD_NN", "wPOD_NN"
-    statistics = pd.DataFrame()
+    statistics = {}
+    trained_models = {}
 
     if 'stats' not in f'{test}':
                            
@@ -504,7 +523,9 @@ for test in types_test:
 
             for rank in ranks:
 
-                directory = f"{method}_method/rank_{rank}" 
+                model = method + f'_{rank}'
+
+                directory = f"{model}" 
                 folders_path = os.path.join(path, directory)
                 try:
                     os.makedirs(folders_path, exist_ok=True)
@@ -513,20 +534,23 @@ for test in types_test:
                 
                 #if os.path.exists(f'{path}/Trained_methods.csv'):
 
-                if os.path.exists(f'{path}/Trained_models.csv'):
-                    trained_models = pd.read_csv(f'{path}/Trained_models.csv')
-                else:
-                    trained_models = pd.DataFrame(columns=['method','rank', 'training error', 
-                                                        'testing error', 'training time', 'expected value', 
-                                                        'variance', 'model path','model'])
+                if os.path.exists(f'{path}/Trained_models.pkl'):
+                    #trained_models = pd.read_csv(f'{path}/Trained_models.csv')
+                    with open(f'{path}/Trained_models.pkl', 'rb') as fp:
+                        trained_models = pickle.load(fp)
+                #else:
+                    # trained_models = pd.DataFrame(columns=['method','rank', 'training error', 
+                    #                                     'testing error', 'training time', 'expected value', 
+                    #                                     'variance', 'model path','model'])
                 
-                df_model = trained_models.query(f"method == '{method}' and rank == {rank}")    
                 
-                if len(df_model) == 0:
+                #df_model = trained_models.query(f'method == "{method}" and rank == {rank}')    
+                
+                if model not in trained_models.keys():
 
-                    print(f"performing {method}...")
+                    print(f"Performing {method} with rank = {rank} ...")
 
-                    if method== "POD":
+                    if method == "POD":
                         
                         Pod = pod.POD('svd', rank=rank)
                         new_path = os.path.join(folders_path, f"{method}.rom")
@@ -608,17 +632,27 @@ for test in types_test:
                         new_path = os.path.join(folders_path, f"{method}.rom")
                         train_sol, test_sol, model_stats = perform_method(method,train_dataset, test_dataset, params_training, params_testing, rank, new_path, conv_ae, ann_enc, weights)
 
+                    # external_dict = {'model': model,
+                    #                  'statistics': model_stats   #'method', 'rank', 'training error', 'testing error','training time', 'model path'
+                    #                 }
+                    
+                    trained_models[f'{model}'] = model_stats
 
-                    model_stats["model"] = [method + f'{rank}']
-                    trained_mod = pd.DataFrame([model_stats])
-                    trained_models = pd.concat([trained_models, trained_mod], ignore_index = True)
-                    df_trained_models = pd.DataFrame(trained_models)
-                    df_trained_models.to_csv(f'{path}/Trained_models.csv', index=False)
+                    
+                    with open(f'{path}/Trained_models.pkl', 'wb') as fp:
+                        pickle.dump(trained_models, fp)
+                    print('dictionary saved successfully to file')
+
+############################################################################
+                    # model_stats["model"] = [method + f'{rank}']
+                    # trained_mod = pd.DataFrame([model_stats])
+                    # trained_models = pd.concat([trained_models, trained_mod], ignore_index = True)
+                    # df_trained_models = pd.DataFrame(trained_models)
+                    # df_trained_models.to_csv(f'{path}/Trained_models.csv', index=False)
                         
                 else:
-                    print(f"{method} already loaded in the data frame")
-                    df = trained_models.query(f"method == '{method}'") 
-                    print(df)
+                    print(f"{method} already present in the dictionary")
+                    print(trained_models[f'{model}'])
 
 
     
@@ -627,46 +661,64 @@ for test in types_test:
         # Caricare nuovo dataset 1000 entries
         # Predire i valori del nuovo dataset con il modello
         # calcolare le statistiche
+
+        if os.path.exists(f'{path}/Trained_models.pkl'):
+            #trained_models = pd.read_csv(f'{path}/Trained_models.csv')
+            with open('Trained_models.pkl', 'rb') as fp:
+                trained_models = pickle.load(fp)
         
-        if os.path.exists(f'{path}/Trained_models.csv'):
-            trained_models = pd.read_csv(f'{path}/Trained_models.csv')
         else:
             raise ValueError("There are no trained models to compute the statistics")
         
         dataset = train_dataset
         params = params_training
 
+        E_FOM = compute_expected_value(dataset.reshape(len(dataset),-1), weights)
+        var_FOM = compute_variance(dataset.reshape(len(dataset),-1), E_FOM, weights)
+
         for model in trained_models['model']:
 
-            given_mod = trained_models[trained_models['model']==f'{model}']
-            stat_dict = compute_stats(dataset, given_mod['model path'], model, weights)   #compute_stats(dataset, model_to_be_loaded, POD14, weights)
-            stats_trained = pd.DataFrame([stat_dict])
+            print(f"Computing stats of {model}...")
+            given_mod = trained_models[f'{model}']
+            stat_dict = compute_stats(dataset, given_mod, model, E_FOM, var_FOM, weights)   #compute_stats(dataset, model_to_be_loaded, POD14, weights)
+            
+            df_trained_stats[model] = stat_dict
+            
+            stats_trained = pd.DataFrame(stat_dict)
+            
             statistics = pd.concat([statistics, stats_trained], ignore_index = True)
             df_trained_stats = pd.DataFrame(statistics)
             df_trained_stats.to_csv(f'{path}/Trained_statistics.csv', index=False)
+
+            train_error = given_mod.loc[0]['training error']
+            test_error = given_mod.loc[0]['testing error']
+
+            print(f"Plotting {model} error...")
+            plt.figure()
+            plt.semilogy(params_training, train_error)
+            plt.semilogy(params_testing, test_error)
+            plt.legend([f'{model} Train', f'{model} Test'])
             
-         
-        print("aaaaaaa")   # for rk in given_mod['rank']:
-                
-            #     #df_model = trained_models.query(f"model == '{model}' and rank == {rk}")
-            #     df_model = trained_models.loc[lambda df: df['rank'] == rk, :]
-            #     dump_path = f'{path}'
-
-            #     stats = compute_stats(train_dataset, df_model, model, rk, weights)
-            #     stats_trained = pd.DataFrame([stats], index=stats.keys())
-            #     statistics = pd.concat([statistics, stats_trained], ignore_index = True)
-            #     df_trained_stats = pd.DataFrame(statistics)
-            #     df_trained_stats.to_csv(f'{path}/Trained_statistics.csv', index=False)
-
+            plt.savefig(f'{path}/Errors_comparison.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+            
+        # save dictionary to person_data.pkl file
+        with open('person_data.pkl', 'wb') as fp:
+            pickle.dump(person, fp)
+        print("aaaaaaa")   
 
     
     
 
 
     # TO DO LIST:
-    # plot of errors
+    # andamento errori (nello stesso grafico)
+    # E[u]
+    # Var[u]
+    # E[u]-E[u^FOM]
+    # Var[u]-Var[u^FOM],
     # plot of loss
     # plot of eigenvectors
     # plot of UQ (da impostare pure)
     
+    #'training error', 'testing error', 'training time', 'expected value', 'variance', 'model path','model
 
