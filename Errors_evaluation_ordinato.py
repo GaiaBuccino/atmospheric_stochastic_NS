@@ -356,7 +356,7 @@ def compute_stats(dataset: np.ndarray, trained_model: str, model: str, E_FOM:np.
 
     #     exp_model = torch.load(trained_model['model_path'])
 
-    exp_model = ROM.load(trained_model.iloc[-1])
+    exp_model = ROM.load(trained_model)
     sol = compute_approx(dataset, params, exp_model, model)
     E_value = compute_expected_value(sol, weights)
     var = compute_variance(sol, E_value, weights)
@@ -367,8 +367,8 @@ def compute_stats(dataset: np.ndarray, trained_model: str, model: str, E_FOM:np.
     res_dict = {'model': f'{model}',
                 'expected value': E_value,
                 'variance': var,
-                'error expected value': error_E,
-                'error variance': error_var
+                'error expected value wrt FOM': error_E,
+                'error variance wrt FOM': error_var
                 }
         
     return res_dict
@@ -468,21 +468,20 @@ def perform_method(method:str, train_dataset:np.ndarray, test_dataset:np.ndarray
     pred_train = pred_train.reshape(len(train_dataset), -1)
     pred_test = pred_test.reshape(len(test_dataset), -1)
 
-    error_train = pred_train - train_dataset_line
+    #error_train = pred_train - train_dataset_line
+    error_train_vec = pred_train - train_dataset_line
+    error_test_vec = pred_test - test_dataset_line
 
-
-    # pred_test = np.zeros((test_dataset_line.shape[0],test_dataset_line.shape[1]))
-    # for ii in range(len(params_testing)):
-
-    #     pred_test[ii] = Rom.predict(params_testing[ii])
-
-    error_test = pred_test - test_dataset_line
+    error_train = np.linalg.norm(pred_train - train_dataset_line)/np.linalg.norm(train_dataset_line)
+    error_test = np.linalg.norm(pred_test - test_dataset_line)/np.linalg.norm(test_dataset_line)
 
     statistics = {#'model name': method + f'{rank}',
                   'method': method,
                   'rank': rank,
                   'training error': error_train,
                   'testing error': error_test,
+                  'training error vector': error_train_vec,
+                  'testing error vector':error_train_vec,
                   'training time': train_time,
                   'model path': dump_path} 
 
@@ -492,7 +491,7 @@ def perform_method(method:str, train_dataset:np.ndarray, test_dataset:np.ndarray
 
 ### main ###
 
-types_test = ["synthetic_discontinuity"] #"simulated_gulf"]  #"snapshots" or "discontinuity"      "synthetic_discontinuity",
+types_test = ["synthetic_discontinuity", "synthetic_discontinuity_stats"] #"simulated_gulf"]  #"snapshots" or "discontinuity"      "synthetic_discontinuity",
 
 for test in types_test:
 
@@ -516,6 +515,7 @@ for test in types_test:
     #ok: "convAE", "wconvAE","POD", "wPOD", "POD_NN", "wPOD_NN"
     statistics = {}
     trained_models = {}
+    stats_models = {}
 
     if 'stats' not in f'{test}':
                            
@@ -641,7 +641,7 @@ for test in types_test:
                     
                     with open(f'{path}/Trained_models.pkl', 'wb') as fp:
                         pickle.dump(trained_models, fp)
-                    print('dictionary saved successfully to file')
+                    print('Model dictionary saved successfully to file')
 
 ############################################################################
                     # model_stats["model"] = [method + f'{rank}']
@@ -664,7 +664,7 @@ for test in types_test:
 
         if os.path.exists(f'{path}/Trained_models.pkl'):
             #trained_models = pd.read_csv(f'{path}/Trained_models.csv')
-            with open('Trained_models.pkl', 'rb') as fp:
+            with open(f'{path}/Trained_models.pkl', 'rb') as fp:
                 trained_models = pickle.load(fp)
         
         else:
@@ -676,35 +676,60 @@ for test in types_test:
         E_FOM = compute_expected_value(dataset.reshape(len(dataset),-1), weights)
         var_FOM = compute_variance(dataset.reshape(len(dataset),-1), E_FOM, weights)
 
-        for model in trained_models['model']:
+        if os.path.exists(f'{path}/Models_stats.pkl'):
+            #trained_models = pd.read_csv(f'{path}/Trained_models.csv')
+            with open(f'{path}/Models_stats.pkl', 'rb') as fp:
+                stats_models = pickle.load(fp)
 
-            print(f"Computing stats of {model}...")
-            given_mod = trained_models[f'{model}']
-            stat_dict = compute_stats(dataset, given_mod, model, E_FOM, var_FOM, weights)   #compute_stats(dataset, model_to_be_loaded, POD14, weights)
-            
-            df_trained_stats[model] = stat_dict
-            
-            stats_trained = pd.DataFrame(stat_dict)
-            
-            statistics = pd.concat([statistics, stats_trained], ignore_index = True)
-            df_trained_stats = pd.DataFrame(statistics)
-            df_trained_stats.to_csv(f'{path}/Trained_statistics.csv', index=False)
+        fig, ax = plt.subplots()
 
-            train_error = given_mod.loc[0]['training error']
-            test_error = given_mod.loc[0]['testing error']
+        for model in trained_models.keys():
 
-            print(f"Plotting {model} error...")
-            plt.figure()
-            plt.semilogy(params_training, train_error)
-            plt.semilogy(params_testing, test_error)
-            plt.legend([f'{model} Train', f'{model} Test'])
+            if model not in stats_models.keys():
+
+                print(f"Computing stats of {model}...")
+                given_mod = trained_models[f'{model}']
+                stat_dict = compute_stats(dataset, given_mod['model path'], model, E_FOM, var_FOM, weights)   #compute_stats(dataset, model_to_be_loaded, POD14, weights)
+                
+                # if os.path.exists(f'{path}/Models_stats.pkl'):
+                #     #trained_models = pd.read_csv(f'{path}/Trained_models.csv')
+                #     with open(f'{path}/Models_stats.pkl', 'rb') as fp:
+                #         stats_models = pickle.load(fp)
+
+                stats_models[f'{model}'] = stat_dict
+
+                with open(f'{path}/Models_stats.pkl', 'wb') as fp:
+                            pickle.dump(stats_models, fp)
+                
+                print('Stats dictionary saved successfully to file')
+
+            #fare i plot
+            stats_path = f'{path}/{model}'
+            plt.imshow(stats_models[f'{model}']['expected value'].reshape(256,256),cmap=plt.cm.jet,origin='lower')
+            plt.colorbar()
+            plt.savefig(f'{stats_path}'+'/Expected_value.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+            plt.close()  
+        
+            plt.imshow(stats_models[f'{model}']['variance'].reshape(256,256),cmap=plt.cm.jet,origin='lower')
+            plt.colorbar()
+            plt.savefig(f'{stats_path}'+'/Variance.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+            plt.close()  
+
+            error = trained_models[f'{model}']['training error']
+            ax.plot(error)
+
+        #     print(f"Plotting {model} error...")
+        #     plt.figure()
+        #     plt.semilogy(params_training, train_error)
+        #     plt.semilogy(params_testing, test_error)
+        #     plt.legend([f'{model} Train', f'{model} Test'])
             
-            plt.savefig(f'{path}/Errors_comparison.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+        #     plt.savefig(f'{path}/Errors_comparison.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
             
-        # save dictionary to person_data.pkl file
-        with open('person_data.pkl', 'wb') as fp:
-            pickle.dump(person, fp)
-        print("aaaaaaa")   
+        # # save dictionary to person_data.pkl file
+        # with open('person_data.pkl', 'wb') as fp:
+        #     pickle.dump(person, fp)
+        # print("aaaaaaa")   
 
     
     
