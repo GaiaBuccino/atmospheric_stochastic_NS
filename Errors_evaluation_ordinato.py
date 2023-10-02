@@ -379,28 +379,49 @@ def compute_approx(dataset:np.ndarray, params: np.ndarray, method: ROM, model: s
     if 'NN' not in f'{model}':        
 
         if 'convAE' in f'{model}':
+            # convAE and wconvAE
 
             tensor = np.expand_dims(dataset, axis=1)     
             
-            pred = method.reduction.inverse_transform(method.reduction.transform(tensor)).T
+            pred = method.reduction.inverse_transform(\
+                method.reduction.transform(tensor)).T
             pred = pred.reshape(len(pred), -1)
             
         else:
+            # POD and wPOD
 
-            pred = method.reduction.inverse_transform(method.reduction.transform(dataset_line.T)).T
+            pred = method.reduction.inverse_transform(\
+                method.reduction.transform(dataset_line.T)).T
             
     ### reduction and approximation ###
 
     else:
-        pred = np.zeros((dataset_line.shape[0],dataset_line.shape[1]))
-        for ii in range(len(params)):
+        
+        if 'encoder' in f'{model}':
+            # encoder-NN and wencoder-NN
+            reduced_coefficients = method.approximation.predict(params)
+            pred = method.reduction.inverse_transform(reduced_coefficients.T).T
 
-            pred[ii,:] = method.predict(params[ii])
+            pred = pred.reshape(len(pred), -1)
+
+            
+
+        else:
+            # POD-NN and wPOD-NN
+            pred = np.zeros((dataset_line.shape[0],dataset_line.shape[1]))
+            for ii in range(len(params)):
+
+                pred[ii,:] = method.predict(params[ii])
 
 
     return pred
 
-def perform_method(method:str, train_dataset:np.ndarray, test_dataset:np.ndarray, params_training:np.ndarray, params_testing:np.ndarray, rank:int,  dump_path:str, reduction:pod.POD or convAE, approximation:Optional[ANN] = None, weights:Optional[np.ndarray] = None)  -> Tuple[np.ndarray, np.ndarray, dict]:  
+def perform_method(method:str, train_dataset:np.ndarray, \
+                test_dataset:np.ndarray, params_training:np.ndarray, \
+                params_testing:np.ndarray, rank:int,  dump_path:str, \
+                reduction:pod.POD or convAE, approximation:Optional[ANN] = None, \
+                weights:Optional[np.ndarray] = None ,  fit_only_approximation:Optional[bool] = False)\
+                -> Tuple[np.ndarray, np.ndarray, dict]:  
     """_summary_
 
     Args:
@@ -430,7 +451,16 @@ def perform_method(method:str, train_dataset:np.ndarray, test_dataset:np.ndarray
     db_train = Database(params_training, train_dataset_line)
     Rom = ROM(db_train, reduction, approximation, weights)
     train_time = -perf_counter()
-    Rom.fit(weights)
+    if fit_only_approximation:
+        reduced_output = Rom.reduction.transform(Rom.database.snapshots.T).T
+
+        if Rom.scaler_red:
+            reduced_output = Rom.scaler_red.fit_transform(reduced_output)
+
+        Rom.approximation.fit(Rom.database.parameters,
+            reduced_output)
+    else:
+        Rom.fit(weights)
     train_time += perf_counter()
     Rom.save(f'{dump_path}')
 
@@ -515,7 +545,7 @@ for test in types_test:
     ranks = [14]    # 2, 6, 14, 30
 
 
-    methods = ["POD","wPOD", "POD_NN", "wPOD_NN","convAE", "wconvAE", "NN_encoder", "NN_wencoder"]
+    methods = ["convAE",  "NN_encoder"]#["POD","wPOD", "POD_NN", "wPOD_NN","convAE", "wconvAE", "NN_encoder", "NN_wencoder"]
     #ok: "convAE", "wconvAE","POD", "wPOD", "POD_NN", "wPOD_NN"
     statistics = {}
     trained_models = {}
@@ -636,10 +666,17 @@ for test in types_test:
                         fake_val = 2
                         neurons_linear = fake_val
 
-                        conv_ae = convAE([fake_val], [fake_val], fake_f(), fake_f(), epochs, neurons_linear)
+                        # conv_ae = convAE([fake_val], [fake_val], fake_f(), fake_f(), epochs, neurons_linear)
+                        
+                        auxiliary_rom = ROM.load(os.path.join(path,f'convAE_{rank}', f"convAE_{cAE_epochs}ep.rom"))
+
+                        conv_ae = auxiliary_rom.reduction
                         ann_enc = ANN([16,64,64], nn.Tanh(), [NN_epochs, 1e-12])
                         new_path = os.path.join(folders_path, f"{method}_{cAE_epochs}ep_cAE_{NN_epochs}ep_NN.rom")
-                        train_sol, test_sol, model_stats = perform_method(method,train_dataset, test_dataset, params_training, params_testing, rank, new_path, conv_ae, ann_enc, weights = None)
+                        train_sol, test_sol, model_stats = perform_method(method,train_dataset, test_dataset, \
+                                                                          params_training, params_testing, rank, \
+                                                                          new_path, conv_ae, ann_enc, weights = None, \
+                                                                          fit_only_approximation = True)
                         
                     elif method== "NN_wencoder":
 
@@ -651,11 +688,16 @@ for test in types_test:
                         fake_val = 2
                         neurons_linear = fake_val
 
-                        conv_ae = convAE([fake_val], [fake_val], fake_f(), fake_f(), epochs, neurons_linear)
+                        # conv_ae = convAE([fake_val], [fake_val], fake_f(), fake_f(), epochs, neurons_linear)
+
+                        auxiliary_rom = ROM.load(os.path.join(path,f'wconvAE_{rank}', f"wconvAE_{cAE_epochs}ep.rom"))
+
+                        conv_ae = auxiliary_rom.reduction
 
                         ann_enc = ANN([16,64,64], nn.Tanh(), [NN_epochs, 1e-12])
                         new_path = os.path.join(folders_path, f"{method}_{cAE_epochs}ep_cAE_{NN_epochs}ep_NN.rom")
-                        train_sol, test_sol, model_stats = perform_method(method,train_dataset, test_dataset, params_training, params_testing, rank, new_path, conv_ae, ann_enc, weights)
+                        train_sol, test_sol, model_stats = perform_method(method,train_dataset, test_dataset, params_training, params_testing, rank, new_path, conv_ae, ann_enc, weights, \
+                                                                          fit_only_approximation = True)
 
                     # external_dict = {'model': model,
                     #                  'statistics': model_stats   #'method', 'rank', 'training error', 'testing error','training time', 'model path'
@@ -720,14 +762,14 @@ for test in types_test:
         # print("Max value var", np.array(var_FOM).max())
         # print("Min value var", np.array(var_FOM).min())
 
-        levels_E_val = np.arange(0.9,1.8,0.005)
+        levels_E_val = np.arange(0.85,1.85,0.005)
         XX,YY = np.meshgrid(xx,yy)
         plt.contourf(XX,YY,E_FOM.reshape(256,256),  levels = levels_E_val, cmap='jet')
         plt.colorbar()
         plt.savefig(f'{path}'+'/Expected_value_FOM.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
         plt.close() 
 
-        levels_var = np.arange(0,0.3,0.005)
+        levels_var = np.arange(0,0.2,0.005)
         XX,YY = np.meshgrid(xx,yy)
         plt.contourf(XX,YY,var_FOM.reshape(256,256),  levels = levels_var, cmap='jet')
         plt.colorbar()
@@ -782,8 +824,8 @@ for test in types_test:
             vars_min.append(var.min())
 
             XX,YY = np.meshgrid(xx,yy)
-            levels_E_val = np.arange(0.9,1.8,0.005)
-            levels_var = np.arange(0,0.3,0.005)
+            levels_E_val = np.arange(0.85,1.85,0.005)
+            levels_var = np.arange(0,0.2,0.005)
             #levels_sd = np.arange(0,0.2,0.005)
             #img=plt.contourf(fld,levels=levels,cmap='coolwarm')
             img = plt.contourf(XX,YY,E_value, levels = levels_E_val, cmap='jet')
