@@ -14,6 +14,21 @@ import matplotlib.pyplot as plt
 from ezyrb import ReducedOrderModel as ROM
 
 
+class Weighted_loss(nn.Module):
+
+    def __init__(self, weights = None):
+        super().__init__()
+        self.weights = weights
+
+    def forward (self,input, target):
+
+        torch_weights = torch.from_numpy(self.weights).double()
+        input = input.reshape(len(input), -1)
+        target = target.reshape(len(target), -1)
+
+        return torch.mean(torch_weights * (input - target).T ** 2)
+
+        
 class convAE(Reduction, ANN):
     """
     Feed-Forward AutoEncoder class (AE)
@@ -64,12 +79,13 @@ class convAE(Reduction, ANN):
         >>> expanded_snapshots = ae.expand(reduced_snapshots)
     """
 
-    def weighted_mse_loss(input, target, weights = None):
+    # def weighted_mse_loss(input, target, weights):
         
-        weightsss = torch.from_numpy(weights)
-        input = input.squeeze().reshape(180,256*256)
-        target = target.squeeze().reshape(180,256*256)
-        return torch.sum(weightsss.double() * (input - target).T ** 2)
+    #     torch_weights = torch.from_numpy(weights).double()
+    #     input = input.squeeze().reshape(len(input), -1)
+    #     target = target.squeeze().reshape(len(target), -1)
+
+    #     return torch.mean(torch_weights * (input - target).T ** 2)
     
     def __init__(self,
                  layers_encoder,
@@ -78,7 +94,7 @@ class convAE(Reduction, ANN):
                  function_decoder,
                  stop_training,
                  neurons_linear,
-                 loss=weighted_mse_loss,
+                 loss=None,
                  optimizer=torch.optim.Adam,
                  lr=0.001,
                  l2_regularization=0,
@@ -87,12 +103,17 @@ class convAE(Reduction, ANN):
                  weights = None
                  ):
 
+
         if layers_encoder[-1] != layers_decoder[0]:
             raise ValueError('Wrong dimension in encoder and decoder layers')
 
         if loss is None:
             loss = torch.nn.MSELoss()
-        # elif weights is not None:
+        elif loss is not None and weights is not None:
+            loss = Weighted_loss(weights)
+        
+        
+        #elif weights is not None:
         #     loss = weighted_mse_loss(self, values, weights)
 
 
@@ -215,7 +236,7 @@ class convAE(Reduction, ANN):
         self.decoder= nn.Sequential(self.decoder_lin, self.unflatten[0], self.decoder_cnn) 
         
     
-    def fit(self, values, weights): #aggiungere i pesi
+    def fit(self, values, weights= None): #aggiungere i pesi
         """
         Build the AE given 'values' and perform training.
 
@@ -239,7 +260,7 @@ class convAE(Reduction, ANN):
 
         if (len(values.shape) != 4):
             values = values.T
-            values = values.reshape(180,256,256)
+            values = values.reshape(len(values),256,256)
             values = np.expand_dims(values, axis=1)        
 
         optimizer = self.optimizer(
@@ -249,7 +270,11 @@ class convAE(Reduction, ANN):
         values = self._convert_numpy_to_torch(values)
         #test = self._convert_numpy_to_torch(test)
         
-
+        if weights is None:
+            self.loss = torch.nn.MSELoss()
+        elif weights is not None:
+            self.loss = Weighted_loss(weights)
+            
         n_epoch = 1
         flag = True
         self.loss_trend = []
@@ -257,11 +282,8 @@ class convAE(Reduction, ANN):
             
             y_pred = self.decoder(self.encoder(values))
             #y_test = self.decoder(self.encoder(test))
-
-            loss = self.loss(y_pred, values, weights)    #moltiplicare sia values sia y_pred per sqrt(peso)
-            #scriverlo senza stravolgere il codice, se non vengono passati parametri deve girare cmq
-            #loss_test = self.loss(y_test, test)
-
+            
+            loss = self.loss(y_pred, values)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -291,16 +313,9 @@ class convAE(Reduction, ANN):
         plt.semilogy(xx, self.loss_trend, 'b')
         #plt.semilogy(xx, self.loss_trend_test, 'r')
         plt.legend(["Train loss"])#,"Test loss"])
-        plt.title(f"conv_ae_{self.stop_training}epochs loss train error")
-        plt.savefig(f"./Stochastic_results/discontinuity_tests/Error_training_convAE_{self.stop_training}epochs_6_conv_layers_{self.n_linear}neurons.pdf", format='pdf',bbox_inches='tight',pad_inches = 0)
+        plt.title(f"conv_ae_{self.stop_training}epochs {loss} train error")
+        plt.savefig(f"./Stochastic_results/discontinuity_tests/Error_training_convAE_{self.stop_training}epochs_6_conv_layers_{self.n_linear}neurons_Weighted.pdf", format='pdf',bbox_inches='tight',pad_inches = 0)
         plt.close()
-
-        
-        # plt.figure()
-        # plt.semilogy(xx, self.loss_trend_test, 'r')
-        # plt.title(f"conv_ae_{self.stop_training}epochs loss test error")
-        # plt.savefig(f"./Stochastic_results/discontinuity_tests/Error_testing_convAE_{self.stop_training}epochs_6_conv_layers.pdf", format='pdf',bbox_inches='tight',pad_inches = 0)
-        # plt.close()
 
         return optimizer
     
@@ -313,7 +328,7 @@ class convAE(Reduction, ANN):
         """
         if (len(X.shape) != 4):
             X = X.T
-            X = X.reshape(180,256,256)
+            X = X.reshape(len(X),256,256)
             X = np.expand_dims(X, axis=1)
 
         optimizer = self.optimizer(
