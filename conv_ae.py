@@ -200,8 +200,11 @@ class convAE(Reduction, ANN):
             nn.Linear(1512, self.n_linear),
         )  
         
+        self.layers_encoder[-1] = self.n_linear
         self.encoder= nn.Sequential(self.encoder_cnn, self.flatten, self.encoder_lin)
-            
+        
+
+        self.layers_decoder[0] = self.n_linear
         # layers_decoder = self.layers_decoder.copy()
         # layers_decoder.append(values.shape[1])
         self.decoder_lin = nn.Sequential(
