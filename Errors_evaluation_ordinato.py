@@ -165,9 +165,7 @@ def compute_approx(dataset:np.ndarray, params: np.ndarray, method: ROM, model: s
 
     return pred
 
-def perform_method(method:str, train_dataset:np.ndarray, \
-                test_dataset:np.ndarray, params_training:np.ndarray, \
-                params_testing:np.ndarray, rank:int,  dump_path:str, \
+def perform_method(method:str, db_train:Database, rank:int,  dump_path:str, \
                 reduction:pod.POD or convAE, approximation:Optional[ANN] = None, \
                 weights:Optional[np.ndarray] = None ,  fit_only_approximation:Optional[bool] = False)\
                 -> Tuple[np.ndarray, np.ndarray, dict]:  
@@ -190,14 +188,13 @@ def perform_method(method:str, train_dataset:np.ndarray, \
     """
     ### data reshaping ###
 
-    train_dataset_line = train_dataset.reshape(len(train_dataset), -1)
-    test_dataset_line = test_dataset.reshape(len(test_dataset), -1)
+    # train_dataset_line = train_dataset.reshape(len(train_dataset), -1)
+    # db_train = Database(params_training, train_dataset_line)
 
     ### fit ###
     if approximation == None:
         approximation = ANN([16,64,64], nn.Tanh(), [400, 1e-12])
 
-    db_train = Database(params_training, train_dataset_line)
     Rom = ROM(db_train, reduction, approximation, weights)
     train_time = -perf_counter()
     if fit_only_approximation:
@@ -211,7 +208,8 @@ def perform_method(method:str, train_dataset:np.ndarray, \
     else:
         Rom.fit(weights)
     train_time += perf_counter()
-    Rom.save(f'{dump_path}')
+    Rom.train_computational_time = train_time
+    Rom.save(f'{dump_path}',save_db=False)
 
     return Rom, train_time
 
@@ -262,6 +260,9 @@ types_test = ["synthetic_discontinuity", "synthetic_discontinuity_stats"]  #"sim
 for test in types_test:
 
     train_dataset, test_dataset, params_training, params_testing = prepare_data(test, 'Data')
+
+    train_dataset_line = train_dataset.reshape(len(train_dataset), -1)
+    db_train = Database(params_training, train_dataset_line)
 
     #weights = np.ones(len(params_training))
     #weights = np.load("weights.npy")
@@ -352,26 +353,26 @@ for test in types_test:
                     if method == "POD":
                         
                         Pod = pod.POD('svd', rank=rank)
-                        Rom, train_time = perform_method(method, train_dataset, test_dataset, params_training, params_testing, rank, new_paths[model], Pod)
+                        Rom, train_time = perform_method(method, db_train, rank, new_paths[model], Pod)
                         
                     elif method== "wPOD":
 
                         wPod = pod.POD('correlation_matrix', rank=rank, weights = weights)
-                        Rom, train_time = perform_method(method, train_dataset, test_dataset, params_training, params_testing, rank, new_paths[model], wPod, weights=weights)
+                        Rom, train_time = perform_method(method, db_train, rank, new_paths[model], wPod, weights=weights)
 
                     elif method== "POD_NN":
 
                         epochs = 25000
                         Pod = pod.POD('svd', rank=rank)
                         ann_POD = ANN([16,64,64], nn.Tanh(), [epochs, 1e-12])
-                        Rom, train_time = perform_method(method, train_dataset, test_dataset, params_training, params_testing, rank, new_paths[model], Pod, approximation = ann_POD)
+                        Rom, train_time = perform_method(method, db_train, rank, new_paths[model], Pod, approximation = ann_POD)
                         
                     elif method== "wPOD_NN":
 
                         epochs = 25000
                         wPod = pod.POD('correlation_matrix', rank=rank, weights = weights)
                         wann_POD = ANN([16,64,64], nn.Tanh(), [epochs, 1e-12])
-                        Rom, train_time = perform_method(method, train_dataset, test_dataset, params_training, params_testing, rank, new_paths[model], wPod, approximation = wann_POD, weights = weights)
+                        Rom, train_time = perform_method(method, db_train, rank, new_paths[model], wPod, approximation = wann_POD, weights = weights)
                         
 
                     elif method== "convAE":
@@ -383,7 +384,7 @@ for test in types_test:
 
                         conv_ae = convAE([fake_val], [fake_val], fake_f(), fake_f(), epochs, neurons_dense_layer)
 
-                        Rom, train_time = perform_method(method, train_dataset, test_dataset, params_training, params_testing, rank, new_paths[model], conv_ae)
+                        Rom, train_time = perform_method(method, db_train, rank, new_paths[model], conv_ae)
 
                     elif method== "wconvAE":
 
@@ -395,7 +396,7 @@ for test in types_test:
                         conv_ae = convAE([fake_val], [fake_val], fake_f(), fake_f(), epochs, neurons_dense_layer, weights=weights)
 
 
-                        Rom, train_time = perform_method(method, train_dataset, test_dataset, params_training, params_testing, rank, new_paths[model], conv_ae, weights = weights)
+                        Rom, train_time = perform_method(method, db_train, rank, new_paths[model], conv_ae, weights = weights)
 
                     elif method== "NN_encoder":
 
@@ -411,8 +412,7 @@ for test in types_test:
 
                         conv_ae = auxiliary_rom.reduction
                         ann_enc = ANN([16,64,64], nn.Tanh(), [NN_epochs, 1e-12])
-                        Rom, train_time = perform_method(method,train_dataset, test_dataset, \
-                                                                          params_training, params_testing, rank, \
+                        Rom, train_time = perform_method(method, db_train, rank, \
                                                                           new_paths[model], conv_ae, ann_enc, weights = None, \
                                                                           fit_only_approximation = True)
                         
@@ -431,7 +431,7 @@ for test in types_test:
                         conv_ae = auxiliary_rom.reduction
 
                         ann_enc = ANN([16,64,64], nn.Tanh(), [NN_epochs, 1e-12])
-                        Rom, train_time = perform_method(method,train_dataset, test_dataset, params_training, params_testing, rank, \
+                        Rom, train_time = perform_method(method, db_train, rank, \
                                                          new_paths[model], conv_ae, ann_enc, weights, \
                                                                           fit_only_approximation = True)
                 
@@ -441,6 +441,7 @@ for test in types_test:
 
                 if model not in model_infos.keys():
                     Rom=ROM.load(new_paths[model])
+                    Rom.database = db_train
 
                     pred_train, pred_test, model_stats  = \
                         compute_prediction_errors(Rom,method,\
