@@ -275,7 +275,7 @@ for test in types_test:
     except OSError as error:
         print(error) 
 
-    ranks = [14]    # 2, 6, 14, 30
+    ranks = [2,6,14]    # 2, 6, 14, 30
 
 
     methods = ["POD","wPOD", "POD_NN", "wPOD_NN","convAE", "wconvAE", "NN_encoder", "NN_wencoder"]
@@ -330,12 +330,15 @@ for test in types_test:
         else:
             model_infos = dict()
 
-        fig, ax = plt.subplots()
-                           
-        for method in methods:          
+        training_errors ={}
+        training_errors['params_training'] = params_training
+
+        for rank in ranks:
+
+            fig, ax = plt.subplots()                           
+            for method in methods:          
         
 
-            for rank in ranks:
 
                 model = method + f'_{rank}'
 
@@ -436,7 +439,7 @@ for test in types_test:
                                                                           fit_only_approximation = True)
                 
                 else:
-                    print(f"{method} already trained in {new_paths[model]}")
+                    print(f"{model} already trained in {new_paths[model]}")
 
 
                 if model not in model_infos.keys():
@@ -455,15 +458,22 @@ for test in types_test:
                 leg.append(f'{method} training')
                 ax.legend(leg)
                 #ax.legend(f'{method} training')
+                training_errors[model] = error
 
                     
                     
+
+            fig.savefig(f'{path}/Errors_comparison_{rank}.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+            plt.close(fig)
+
+
         with open(f'{path}/Trained_models.pkl', 'wb') as fp:
             pickle.dump(model_infos, fp)
         print('Model dictionary saved successfully to file')
 
-        fig.savefig(f'{path}/Errors_comparison.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
-        plt.close(fig)
+        training_error_df = pd.DataFrame(training_errors)
+
+        training_error_df.to_csv('training_errors.csv', index=True)
 
 
     
