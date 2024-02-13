@@ -90,7 +90,11 @@ def compute_variance(dataset: np.ndarray, avg_sol: Optional[np.ndarray] = None, 
 
     return var
 
-def compute_stats(dataset: np.ndarray, trained_model: str, model: str, E_FOM:np.ndarray, var_FOM:np.ndarray, params: Optional[np.ndarray] = None, weights: Optional[np.ndarray] = None) -> dict:
+def compute_stats(dataset: np.ndarray, trained_model: str, 
+                  model: str, E_FOM:np.ndarray, var_FOM:np.ndarray,
+                  params: Optional[np.ndarray] = None, 
+                  weights: Optional[np.ndarray] = None) -> dict:
+    
     #compute_stats(dataset, model_to_be_loaded, POD14, weights) 
     # if model == 'POD':
     #     exp_model = pod.POD()
@@ -106,6 +110,9 @@ def compute_stats(dataset: np.ndarray, trained_model: str, model: str, E_FOM:np.
 
     #     exp_model = torch.load(trained_model['model_path'])
 
+
+    FOM_dataset_line = dataset.reshape(len(dataset), -1)
+
     exp_model = ROM.load(trained_model)
     sol = compute_approx(dataset, params, exp_model, model)
     E_value = compute_expected_value(sol, weights)
@@ -114,11 +121,19 @@ def compute_stats(dataset: np.ndarray, trained_model: str, model: str, E_FOM:np.
     error_E = np.linalg.norm(E_value - E_FOM)/np.sqrt(E_value.shape[0])
     error_var = np.linalg.norm(var - var_FOM)/np.sqrt(E_value.shape[0])
 
+
+    error_parametric = np.zeros(len(FOM_dataset_line))
+
+    for kk in range(len(FOM_dataset_line)):
+        error_parametric[kk] = np.linalg.norm(sol[kk] - FOM_dataset_line[kk])/np.linalg.norm(train_dataset_line[kk])
+
+
     res_dict = {'model': f'{model}',
                 'expected value': E_value,
                 'variance': var,
                 'error expected value wrt FOM': error_E,
-                'error variance wrt FOM': error_var
+                'error variance wrt FOM': error_var,
+                'error parametric': error_parametric
                 }
         
     return res_dict
@@ -331,7 +346,7 @@ for test in types_test:
             model_infos = dict()
 
         training_errors ={}
-        training_errors['params_training'] = params_training
+        training_errors['params_training'] = params_training.reshape(-1)
 
         for rank in ranks:
 
@@ -473,7 +488,7 @@ for test in types_test:
 
         training_error_df = pd.DataFrame(training_errors)
 
-        training_error_df.to_csv('training_errors.csv', index=True)
+        training_error_df.to_csv(f'{path}/training_errors.csv', index=False)
 
 
     
@@ -529,6 +544,11 @@ for test in types_test:
                 stats_models = pickle.load(fp)
 
         #fig, ax = plt.subplots()
+                
+
+        test_errors ={}
+        test_errors['params_training'] = params.reshape(-1)
+
 
         for model in model_errors.keys():
 
@@ -560,6 +580,8 @@ for test in types_test:
 
             E_value = stats_models[f'{model}']['expected value'].reshape(256,256)
             var = stats_models[f'{model}']['variance'].reshape(256,256)
+
+            test_errors[model] = stats_models[model]['error parametric']
 
             # e_values_max.append(E_value.max())
             # e_values_min.append(E_value.min())
@@ -608,6 +630,11 @@ for test in types_test:
         # with open('person_data.pkl', 'wb') as fp:
         #     pickle.dump(person, fp)
         # print("aaaaaaa")   
+
+        test_error_df = pd.DataFrame(test_errors)
+
+        test_error_df.to_csv(f'{path}/test_errors.csv', index=False)
+
 
     
     
