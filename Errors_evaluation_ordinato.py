@@ -23,7 +23,7 @@ from time import perf_counter
 from typing import Optional, Tuple
 import csv
 
-
+with_plot = False
 #Different test possibilities: discontinuity, snapshots
 
 def prepare_data(db_type: str, folder: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -93,7 +93,8 @@ def compute_variance(dataset: np.ndarray, avg_sol: Optional[np.ndarray] = None, 
 def compute_stats(dataset: np.ndarray, trained_model: str, 
                   model: str, E_FOM:np.ndarray, var_FOM:np.ndarray,
                   params: Optional[np.ndarray] = None, 
-                  weights: Optional[np.ndarray] = None) -> dict:
+                  weights: Optional[np.ndarray] = None,
+                  idx_to_plot = None) -> dict:
     
     #compute_stats(dataset, model_to_be_loaded, POD14, weights) 
     # if model == 'POD':
@@ -125,7 +126,27 @@ def compute_stats(dataset: np.ndarray, trained_model: str,
     error_parametric = np.zeros(len(FOM_dataset_line))
 
     for kk in range(len(FOM_dataset_line)):
-        error_parametric[kk] = np.linalg.norm(sol[kk] - FOM_dataset_line[kk])/np.linalg.norm(train_dataset_line[kk])
+        error_parametric[kk] = np.linalg.norm(sol[kk] - FOM_dataset_line[kk])/np.linalg.norm(FOM_dataset_line[kk])
+
+    if idx_to_plot is not None:
+        model_folder = trained_model[:-len(trained_model.split('/')[-1])]
+        save_path = os.path.join(model_folder,"simul")
+  
+        try:
+            os.makedirs(save_path, exist_ok=True)
+        except OSError as error:
+            print(error) 
+
+        xx = np.linspace(0,1,256)
+        yy = np.linspace(0,1,256)
+        levels_E_val = np.arange(0.85,1.85,0.005)
+        XX,YY = np.meshgrid(xx,yy)
+        if with_plot:
+            for idx in idx_to_plot:
+                plt.contourf(XX,YY, sol[idx,:].reshape(256,256),  levels = levels_E_val, cmap='jet')
+                plt.colorbar()
+                plt.savefig(os.path.join(save_path,f'ROM_{idx}.png'),bbox_inches='tight',pad_inches = 0)
+                plt.close()
 
 
     res_dict = {'model': f'{model}',
@@ -289,6 +310,14 @@ for test in types_test:
         os.makedirs(path, exist_ok=True)
     except OSError as error:
         print(error) 
+
+    plt.figure(figsize=(4,3))
+    plt.plot(params_training, weights)
+    plt.xlabel("Parameter")
+    plt.ylabel("Weight")
+    plt.tight_layout()
+    plt.savefig(os.path.join(path,"weights.pdf"))
+    plt.close()
 
     ranks = [2,6,14]    # 2, 6, 14, 30
 
@@ -498,6 +527,7 @@ for test in types_test:
         # Predire i valori del nuovo dataset con il modello
         # calcolare le statistiche
 
+
         xx = np.linspace(0,1,256)
         yy = np.linspace(0,1,256)
 
@@ -511,6 +541,16 @@ for test in types_test:
         
         dataset = train_dataset
         params = params_training
+
+        n_plot = 10
+        idx_to_plot = np.arange(0,len(params),len(params)//n_plot)
+
+        FOM_plots_path = os.path.join(path,"FOM_simul")
+        try:
+            os.makedirs(FOM_plots_path, exist_ok=True)
+        except OSError as error:
+            print(error) 
+
 
         E_FOM = compute_expected_value(dataset.reshape(len(dataset),-1), weights)
         var_FOM = compute_variance(dataset.reshape(len(dataset),-1), E_FOM, weights)
@@ -532,7 +572,14 @@ for test in types_test:
         plt.contourf(XX,YY,var_FOM.reshape(256,256),  levels = levels_var, cmap='jet')
         plt.colorbar()
         plt.savefig(f'{path}'+'/Variance_FOM.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
-        plt.close() 
+        plt.close()
+
+        if with_plot:
+            for idx in idx_to_plot:
+                plt.contourf(XX,YY, dataset[idx,:,:],  levels = levels_E_val, cmap='jet')
+                plt.colorbar()
+                plt.savefig(os.path.join(FOM_plots_path,f'FOM_{idx}.png'),bbox_inches='tight',pad_inches = 0)
+                plt.close()
         
         # plt.imshow(E_FOM.reshape(256,256),cmap=plt.cm.jet,origin='lower')
         # plt.colorbar()
@@ -561,7 +608,11 @@ for test in types_test:
 
                 print(f"Computing stats of {model}...")
                 given_mod = model_errors[f'{model}']
-                stat_dict = compute_stats(dataset, given_mod['model path'], model, E_FOM, var_FOM, params = params, weights = weights)   #compute_stats(dataset, model_to_be_loaded, POD14, weights)
+                stat_dict = compute_stats(dataset, given_mod['model path'], 
+                                          model, E_FOM, var_FOM, 
+                                          params = params, 
+                                          weights = weights, 
+                                          idx_to_plot=idx_to_plot)   #compute_stats(dataset, model_to_be_loaded, POD14, weights)
                 
                 # if os.path.exists(f'{path}/Models_stats.pkl'):
                 #     #trained_models = pd.read_csv(f'{path}/Trained_models.csv')

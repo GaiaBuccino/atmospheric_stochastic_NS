@@ -275,7 +275,6 @@
 \begin{document}
 	\title{Tests} 
 
-\section{10000 Epochs $\psi-\omega$}
 	
 \newcommand{\testname}{../Stochastic_results/synthetic_discontinuity_tests}
  
@@ -1071,4 +1070,311 @@
 
 \caption{All together: train (left) and test (right)}
 \end{figure}
+
+	
+
+\begin{figure}\centering
+	\newcommand{\NPOD}{2}
+	\newcommand{\method}{POD}
+	\newcommand{\methodlabel}{POD}
+	\begin{minipage}{0.49\textwidth}
+		\begin{tikzpicture}
+			\begin{axis}[
+				ylabel = Error,
+				grid=major,
+				ymax = 0.2,
+				legend style={nodes={scale=0.6, transform shape}},
+				width=\textwidth
+				]
+%				\renewcommand{\method}{POD}
+%				\renewcommand{\methodlabel}{POD}
+%				\addplot[black] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+%				\addlegendentry{POD \NPOD}
+%				
+%				\renewcommand{\method}{POD_NN}
+%				\renewcommand{\methodlabel}{PODNN}
+%				\addplot[red, dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+%				\addlegendentry{PODNN \NPOD}
+				
+				\renewcommand{\method}{convAE}
+				\renewcommand{\methodlabel}{convAE}
+				\addplot[blue, dashdotted] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+				\addlegendentry{convAE \NPOD}
+				
+				
+%				\renewcommand{\method}{NN_encoder}
+%				\renewcommand{\methodlabel}{NN encoder}
+%				\addplot[olive, dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+%				\addlegendentry{NN encoder \NPOD}
+%				
+%				\renewcommand{\method}{wPOD}
+%				\addplot[green, densely dashdotdotted] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+%				\addlegendentry{wPOD \NPOD}
+%				
+%				\renewcommand{\method}{wPOD_NN}
+%				\addplot[purple, densely dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+%				\addlegendentry{wPODNN \NPOD}
+				
+				\renewcommand{\method}{wconvAE}
+				\addplot[magenta, densely dashdotted] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+				\addlegendentry{wconvAE \NPOD}
+				
+				
+%				\renewcommand{\method}{NN_wencoder}
+%				\addplot[yellow, densely dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+%				\addlegendentry{NN wencoder \NPOD}
+			\end{axis}
+		\end{tikzpicture}
+		\renewcommand{\NPOD}{6}
+		\begin{tikzpicture}
+			\begin{axis}[
+				ylabel = Error,
+				grid=major,
+				ymax = 0.2,
+				legend style={nodes={scale=0.6, transform shape}},
+				width=\textwidth
+				]
+%				\renewcommand{\method}{POD}
+%				\renewcommand{\methodlabel}{POD}
+%				\addplot[black] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+%				\addlegendentry{POD \NPOD}
+%				
+%				\renewcommand{\method}{POD_NN}
+%				\renewcommand{\methodlabel}{PODNN}
+%				\addplot[red, dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+%				\addlegendentry{PODNN \NPOD}
+				
+				\renewcommand{\method}{convAE}
+				\renewcommand{\methodlabel}{convAE}
+				\addplot[blue, dashdotted] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+				\addlegendentry{convAE \NPOD}
+				
+				
+%				\renewcommand{\method}{NN_encoder}
+%				\renewcommand{\methodlabel}{NN encoder}
+%				\addplot[olive, dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+%				\addlegendentry{NN encoder \NPOD}
+%				
+%				\renewcommand{\method}{wPOD}
+%				\addplot[green, densely dashdotdotted] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+%				\addlegendentry{wPOD \NPOD}
+%				
+%				\renewcommand{\method}{wPOD_NN}
+%				\addplot[purple, densely dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+%				\addlegendentry{wPODNN \NPOD}
+				
+				\renewcommand{\method}{wconvAE}
+				\addplot[magenta, densely dashdotted] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+				\addlegendentry{wconvAE \NPOD}
+				
+				
+%				\renewcommand{\method}{NN_wencoder}
+%				\addplot[yellow, densely dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+%				\addlegendentry{NN wencoder \NPOD}
+			\end{axis}
+		\end{tikzpicture}	
+		\renewcommand{\NPOD}{14}
+		\begin{tikzpicture}
+			\begin{axis}[
+				ylabel = Error,
+				grid=major,
+				ymax = 0.2,
+				legend style={nodes={scale=0.6, transform shape}},
+				width=\textwidth
+				]
+%				\renewcommand{\method}{POD}
+%				\renewcommand{\methodlabel}{POD}
+%				\addplot[black] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+%				\addlegendentry{POD \NPOD}
+%				
+%				\renewcommand{\method}{POD_NN}
+%				\renewcommand{\methodlabel}{PODNN}
+%				\addplot[red, dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+%				\addlegendentry{PODNN \NPOD}
+				
+				\renewcommand{\method}{convAE}
+				\renewcommand{\methodlabel}{convAE}
+				\addplot[blue, dashdotted] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+				\addlegendentry{convAE \NPOD}
+				
+				
+%				\renewcommand{\method}{NN_encoder}
+%				\renewcommand{\methodlabel}{NN encoder}
+%				\addplot[olive, dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+%				\addlegendentry{NN encoder \NPOD}
+%				
+%				\renewcommand{\method}{wPOD}
+%				\addplot[green, densely dashdotdotted] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+%				\addlegendentry{wPOD \NPOD}
+%				
+%				\renewcommand{\method}{wPOD_NN}
+%				\addplot[purple, densely dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+%				\addlegendentry{wPODNN \NPOD}
+				
+				\renewcommand{\method}{wconvAE}
+				\addplot[magenta, densely dashdotted] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+				\addlegendentry{wconvAE \NPOD}
+				
+				
+%				\renewcommand{\method}{NN_wencoder}
+%				\addplot[yellow, densely dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/training_errors.csv};
+%				\addlegendentry{NN wencoder \NPOD}
+			\end{axis}
+		\end{tikzpicture}
+	\end{minipage}\hfill
+	\begin{minipage}{0.49\textwidth}
+		\newcommand{\filename}{test_errors.csv}
+		\renewcommand{\NPOD}{2}
+		\renewcommand{\method}{POD}
+		\renewcommand{\methodlabel}{POD}
+		
+		\begin{tikzpicture}
+			\begin{axis}[
+				ylabel = Error,
+				grid=major,
+				ymax = 0.2,
+				legend style={nodes={scale=0.6, transform shape}},
+				width=\textwidth
+				]
+%				\renewcommand{\method}{POD}
+%				\renewcommand{\methodlabel}{POD}
+%				\addplot[black] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+%				\addlegendentry{POD \NPOD}
+%				
+%				\renewcommand{\method}{POD_NN}
+%				\renewcommand{\methodlabel}{PODNN}
+%				\addplot[red, dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+%				\addlegendentry{PODNN \NPOD}
+				
+				\renewcommand{\method}{convAE}
+				\renewcommand{\methodlabel}{convAE}
+				\addplot[blue, dashdotted] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+				\addlegendentry{convAE \NPOD}
+				
+				
+%				\renewcommand{\method}{NN_encoder}
+%				\renewcommand{\methodlabel}{NN encoder}
+%				\addplot[olive, dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+%				\addlegendentry{NN encoder \NPOD}
+%				
+%				\renewcommand{\method}{wPOD}
+%				\addplot[green, densely dashdotdotted] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+%				\addlegendentry{wPOD \NPOD}
+%				
+%				\renewcommand{\method}{wPOD_NN}
+%				\addplot[purple, densely dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+%				\addlegendentry{wPODNN \NPOD}
+				
+				\renewcommand{\method}{wconvAE}
+				\addplot[magenta, densely dashdotted] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+				\addlegendentry{wconvAE \NPOD}
+				
+				
+%				\renewcommand{\method}{NN_wencoder}
+%				\addplot[yellow, densely dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+%				\addlegendentry{NN wencoder \NPOD}
+			\end{axis}
+		\end{tikzpicture}
+		\renewcommand{\NPOD}{6}
+		\begin{tikzpicture}
+			\begin{axis}[
+				ylabel = Error,
+				grid=major,
+				ymax = 0.2,
+				legend style={nodes={scale=0.6, transform shape}},
+				width=\textwidth
+				]
+%				\renewcommand{\method}{POD}
+%				\renewcommand{\methodlabel}{POD}
+%				\addplot[black] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+%				\addlegendentry{POD \NPOD}
+%				
+%				\renewcommand{\method}{POD_NN}
+%				\renewcommand{\methodlabel}{PODNN}
+%				\addplot[red, dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+%				\addlegendentry{PODNN \NPOD}
+				
+				\renewcommand{\method}{convAE}
+				\renewcommand{\methodlabel}{convAE}
+				\addplot[blue, dashdotted] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+				\addlegendentry{convAE \NPOD}
+				
+%				
+%				\renewcommand{\method}{NN_encoder}
+%				\renewcommand{\methodlabel}{NN encoder}
+%				\addplot[olive, dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+%				\addlegendentry{NN encoder \NPOD}
+%				
+%				\renewcommand{\method}{wPOD}
+%				\addplot[green, densely dashdotdotted] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+%				\addlegendentry{wPOD \NPOD}
+%				
+%				\renewcommand{\method}{wPOD_NN}
+%				\addplot[purple, densely dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+%				\addlegendentry{wPODNN \NPOD}
+				
+				\renewcommand{\method}{wconvAE}
+				\addplot[magenta, densely dashdotted] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+				\addlegendentry{wconvAE \NPOD}
+				
+				
+%				\renewcommand{\method}{NN_wencoder}
+%				\addplot[yellow, densely dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+%				\addlegendentry{NN wencoder \NPOD}
+			\end{axis}
+		\end{tikzpicture}
+		
+		\renewcommand{\NPOD}{14}
+		\begin{tikzpicture}
+			\begin{axis}[
+				ylabel = Error,
+				grid=major,
+				ymax = 0.2,
+				legend style={nodes={scale=0.6, transform shape}},
+				width=\textwidth
+				]
+%				\renewcommand{\method}{POD}
+%				\renewcommand{\methodlabel}{POD}
+%				\addplot[black] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+%				\addlegendentry{POD \NPOD}
+%				
+%				\renewcommand{\method}{POD_NN}
+%				\renewcommand{\methodlabel}{PODNN}
+%				\addplot[red, dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+%				\addlegendentry{PODNN \NPOD}
+				
+				\renewcommand{\method}{convAE}
+				\renewcommand{\methodlabel}{convAE}
+				\addplot[blue, dashdotted] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+				\addlegendentry{convAE \NPOD}
+				
+				
+%				\renewcommand{\method}{NN_encoder}
+%				\renewcommand{\methodlabel}{NN encoder}
+%				\addplot[olive, dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+%				\addlegendentry{NN encoder \NPOD}
+				
+%				\renewcommand{\method}{wPOD}
+%				\addplot[green, densely dashdotdotted] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+%				\addlegendentry{wPOD \NPOD}
+				
+%				\renewcommand{\method}{wPOD_NN}
+%				\addplot[purple, densely dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+%				\addlegendentry{wPODNN \NPOD}
+				
+				\renewcommand{\method}{wconvAE}
+				\addplot[magenta, densely dashdotted] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+				\addlegendentry{wconvAE \NPOD}
+				
+				
+%				\renewcommand{\method}{NN_wencoder}
+%				\addplot[yellow, densely dashed] table [x=params_training, y=\method_\NPOD,  col sep=comma]{\testname/\filename};
+%				\addlegendentry{NN wencoder \NPOD}
+			\end{axis}
+		\end{tikzpicture}
+	\end{minipage}
+	
+	\caption{ONLY convAE and wConvAE together: train (left) and test (right)}
+\end{figure}
+
 \end{document}
