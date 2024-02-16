@@ -23,7 +23,7 @@ from time import perf_counter
 from typing import Optional, Tuple
 import csv
 
-with_plot = False
+with_plot = True
 #Different test possibilities: discontinuity, snapshots
 
 def prepare_data(db_type: str, folder: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
