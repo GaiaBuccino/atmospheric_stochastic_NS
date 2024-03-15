@@ -23,7 +23,7 @@ from time import perf_counter
 from typing import Optional, Tuple
 import csv
 
-
+with_plot = True
 #Different test possibilities: discontinuity, snapshots
 
 def prepare_data(db_type: str, folder: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -90,7 +90,12 @@ def compute_variance(dataset: np.ndarray, avg_sol: Optional[np.ndarray] = None, 
 
     return var
 
-def compute_stats(dataset: np.ndarray, trained_model: str, model: str, E_FOM:np.ndarray, var_FOM:np.ndarray, params: Optional[np.ndarray] = None, weights: Optional[np.ndarray] = None) -> dict:
+def compute_stats(dataset: np.ndarray, trained_model: str, 
+                  model: str, E_FOM:np.ndarray, var_FOM:np.ndarray,
+                  params: Optional[np.ndarray] = None, 
+                  weights: Optional[np.ndarray] = None,
+                  idx_to_plot = None) -> dict:
+    
     #compute_stats(dataset, model_to_be_loaded, POD14, weights) 
     # if model == 'POD':
     #     exp_model = pod.POD()
@@ -106,6 +111,9 @@ def compute_stats(dataset: np.ndarray, trained_model: str, model: str, E_FOM:np.
 
     #     exp_model = torch.load(trained_model['model_path'])
 
+
+    FOM_dataset_line = dataset.reshape(len(dataset), -1)
+
     exp_model = ROM.load(trained_model)
     sol = compute_approx(dataset, params, exp_model, model)
     E_value = compute_expected_value(sol, weights)
@@ -114,11 +122,39 @@ def compute_stats(dataset: np.ndarray, trained_model: str, model: str, E_FOM:np.
     error_E = np.linalg.norm(E_value - E_FOM)/np.sqrt(E_value.shape[0])
     error_var = np.linalg.norm(var - var_FOM)/np.sqrt(E_value.shape[0])
 
+
+    error_parametric = np.zeros(len(FOM_dataset_line))
+
+    for kk in range(len(FOM_dataset_line)):
+        error_parametric[kk] = np.linalg.norm(sol[kk] - FOM_dataset_line[kk])/np.linalg.norm(FOM_dataset_line[kk])
+
+    if idx_to_plot is not None:
+        model_folder = trained_model[:-len(trained_model.split('/')[-1])]
+        save_path = os.path.join(model_folder,"simul")
+  
+        try:
+            os.makedirs(save_path, exist_ok=True)
+        except OSError as error:
+            print(error) 
+
+        xx = np.linspace(0,1,256)
+        yy = np.linspace(0,1,256)
+        levels_E_val = np.arange(0.85,1.85,0.005)
+        XX,YY = np.meshgrid(xx,yy)
+        if with_plot:
+            for idx in idx_to_plot:
+                plt.contourf(XX,YY, sol[idx,:].reshape(256,256),  levels = levels_E_val, cmap='jet')
+                plt.colorbar()
+                plt.savefig(os.path.join(save_path,f'ROM_{idx}.png'),bbox_inches='tight',pad_inches = 0)
+                plt.close()
+
+
     res_dict = {'model': f'{model}',
                 'expected value': E_value,
                 'variance': var,
                 'error expected value wrt FOM': error_E,
-                'error variance wrt FOM': error_var
+                'error variance wrt FOM': error_var,
+                'error parametric': error_parametric
                 }
         
     return res_dict
@@ -275,7 +311,15 @@ for test in types_test:
     except OSError as error:
         print(error) 
 
-    ranks = [14]    # 2, 6, 14, 30
+    plt.figure(figsize=(4,3))
+    plt.plot(params_training, weights)
+    plt.xlabel("Parameter")
+    plt.ylabel("Weight")
+    plt.tight_layout()
+    plt.savefig(os.path.join(path,"weights.pdf"))
+    plt.close()
+
+    ranks = [2,6,14]    # 2, 6, 14, 30
 
 
     methods = ["POD","wPOD", "POD_NN", "wPOD_NN","convAE", "wconvAE", "NN_encoder", "NN_wencoder"]
@@ -330,12 +374,15 @@ for test in types_test:
         else:
             model_infos = dict()
 
-        fig, ax = plt.subplots()
-                           
-        for method in methods:          
+        training_errors ={}
+        training_errors['params_training'] = params_training.reshape(-1)
+
+        for rank in ranks:
+
+            fig, ax = plt.subplots()                           
+            for method in methods:          
         
 
-            for rank in ranks:
 
                 model = method + f'_{rank}'
 
@@ -436,7 +483,7 @@ for test in types_test:
                                                                           fit_only_approximation = True)
                 
                 else:
-                    print(f"{method} already trained in {new_paths[model]}")
+                    print(f"{model} already trained in {new_paths[model]}")
 
 
                 if model not in model_infos.keys():
@@ -455,15 +502,22 @@ for test in types_test:
                 leg.append(f'{method} training')
                 ax.legend(leg)
                 #ax.legend(f'{method} training')
+                training_errors[model] = error
 
                     
                     
+
+            fig.savefig(f'{path}/Errors_comparison_{rank}.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
+            plt.close(fig)
+
+
         with open(f'{path}/Trained_models.pkl', 'wb') as fp:
             pickle.dump(model_infos, fp)
         print('Model dictionary saved successfully to file')
 
-        fig.savefig(f'{path}/Errors_comparison.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
-        plt.close(fig)
+        training_error_df = pd.DataFrame(training_errors)
+
+        training_error_df.to_csv(f'{path}/training_errors.csv', index=False)
 
 
     
@@ -472,6 +526,7 @@ for test in types_test:
         # Caricare nuovo dataset 1000 entries
         # Predire i valori del nuovo dataset con il modello
         # calcolare le statistiche
+
 
         xx = np.linspace(0,1,256)
         yy = np.linspace(0,1,256)
@@ -486,6 +541,16 @@ for test in types_test:
         
         dataset = train_dataset
         params = params_training
+
+        n_plot = 10
+        idx_to_plot = np.arange(0,len(params),len(params)//n_plot)
+
+        FOM_plots_path = os.path.join(path,"FOM_simul")
+        try:
+            os.makedirs(FOM_plots_path, exist_ok=True)
+        except OSError as error:
+            print(error) 
+
 
         E_FOM = compute_expected_value(dataset.reshape(len(dataset),-1), weights)
         var_FOM = compute_variance(dataset.reshape(len(dataset),-1), E_FOM, weights)
@@ -507,7 +572,14 @@ for test in types_test:
         plt.contourf(XX,YY,var_FOM.reshape(256,256),  levels = levels_var, cmap='jet')
         plt.colorbar()
         plt.savefig(f'{path}'+'/Variance_FOM.pdf', format='pdf',bbox_inches='tight',pad_inches = 0)
-        plt.close() 
+        plt.close()
+
+        if with_plot:
+            for idx in idx_to_plot:
+                plt.contourf(XX,YY, dataset[idx,:,:],  levels = levels_E_val, cmap='jet')
+                plt.colorbar()
+                plt.savefig(os.path.join(FOM_plots_path,f'FOM_{idx}.png'),bbox_inches='tight',pad_inches = 0)
+                plt.close()
         
         # plt.imshow(E_FOM.reshape(256,256),cmap=plt.cm.jet,origin='lower')
         # plt.colorbar()
@@ -519,6 +591,11 @@ for test in types_test:
                 stats_models = pickle.load(fp)
 
         #fig, ax = plt.subplots()
+                
+
+        test_errors ={}
+        test_errors['params_training'] = params.reshape(-1)
+
 
         for model in model_errors.keys():
 
@@ -531,7 +608,11 @@ for test in types_test:
 
                 print(f"Computing stats of {model}...")
                 given_mod = model_errors[f'{model}']
-                stat_dict = compute_stats(dataset, given_mod['model path'], model, E_FOM, var_FOM, params = params, weights = weights)   #compute_stats(dataset, model_to_be_loaded, POD14, weights)
+                stat_dict = compute_stats(dataset, given_mod['model path'], 
+                                          model, E_FOM, var_FOM, 
+                                          params = params, 
+                                          weights = weights, 
+                                          idx_to_plot=idx_to_plot)   #compute_stats(dataset, model_to_be_loaded, POD14, weights)
                 
                 # if os.path.exists(f'{path}/Models_stats.pkl'):
                 #     #trained_models = pd.read_csv(f'{path}/Trained_models.csv')
@@ -550,6 +631,8 @@ for test in types_test:
 
             E_value = stats_models[f'{model}']['expected value'].reshape(256,256)
             var = stats_models[f'{model}']['variance'].reshape(256,256)
+
+            test_errors[model] = stats_models[model]['error parametric']
 
             # e_values_max.append(E_value.max())
             # e_values_min.append(E_value.min())
@@ -598,6 +681,11 @@ for test in types_test:
         # with open('person_data.pkl', 'wb') as fp:
         #     pickle.dump(person, fp)
         # print("aaaaaaa")   
+
+        test_error_df = pd.DataFrame(test_errors)
+
+        test_error_df.to_csv(f'{path}/test_errors.csv', index=False)
+
 
     
     

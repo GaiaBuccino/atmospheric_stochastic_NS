@@ -340,7 +340,7 @@ class convAE(Reduction, ANN):
 
         #values = self._convert_numpy_to_torch(values)
         X = self._convert_numpy_to_torch(X)#.T
-        g = self.encoder(X)
+        g = self.encoder.eval()(X)
         return g.cpu().detach().numpy().T
 
     def inverse_transform(self, g):
@@ -350,7 +350,7 @@ class convAE(Reduction, ANN):
         :param: numpy.ndarray g the latent variables.
         """
         g = self._convert_numpy_to_torch(g).T
-        u = self.decoder(g)
+        u = self.decoder.eval()(g)
         return u.cpu().detach().numpy().T
 
     def reduce(self, X):
