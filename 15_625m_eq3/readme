@@ -1,0 +1,38 @@
+After running ./Allrun file go to 0 path and open T:
+
+cd 0
+gedit T
+
+
+and change
+
+top
+    {
+        type            zeroGradient;
+    }
+bottom
+    {
+        type            zeroGradient;
+    }
+
+into
+
+top
+    {
+        type            fixedGradient;
+        gradient        -0.00981;
+    }
+bottom
+    {
+        type            fixedGradient;
+        gradient        0.00981;
+    }
+    
+and run the solver by digiting:
+
+StrakaFoam
+
+
+
+
+
